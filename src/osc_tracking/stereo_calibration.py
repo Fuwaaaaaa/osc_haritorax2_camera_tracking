@@ -154,14 +154,18 @@ def load_calibration(path: str | Path) -> StereoCalibration | None:
     path = Path(path)
     if not path.exists():
         return None
-    data = np.load(path)
-    return StereoCalibration(
-        K1=data["K1"], D1=data["D1"],
-        K2=data["K2"], D2=data["D2"],
-        R=data["R"], T=data["T"],
-        image_size=tuple(data["image_size"]),
-        reprojection_error=float(data["reprojection_error"]),
-    )
+    try:
+        data = np.load(path)
+        return StereoCalibration(
+            K1=data["K1"], D1=data["D1"],
+            K2=data["K2"], D2=data["D2"],
+            R=data["R"], T=data["T"],
+            image_size=tuple(data["image_size"]),
+            reprojection_error=float(data["reprojection_error"]),
+        )
+    except Exception:
+        logger.warning("Failed to load calibration from %s", path)
+        return None
 
 
 def triangulate_points(
