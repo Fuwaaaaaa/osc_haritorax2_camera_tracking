@@ -42,13 +42,28 @@
 
 ## P3 - Nice to Have
 
+### 汎用IMU+カメラフュージョンミドルウェアへのリブランド
+- **What:** HaritoraX2専用ではなく「任意のOSC対応IMUトラッカー + Webカメラ」として位置付け直す
+- **Why:** 現在のコードはOSC入力で既にトラッカー非依存。HaritoraX2を「最初の対応デバイス」として扱えば、SlimeVR、Tundra、Vive Tracker等のユーザーも対象にできる。10xのユーザーベース拡大
+- **Effort:** S（CC: 20分）README/READMEのリフレーミング + osc_receiver.pyのドキュメント更新
+- **Priority:** P2
+- **Context:** CEO Subagent #2が強く推奨。「HaritoraX2専用設計は市場をniche of nicheに限定する」
+
+### 直接BLE/Serial HaritoraX2接続
+- **What:** SlimeTora+SlimeVR依存を排除し、bleakライブラリで直接BLE接続
+- **Why:** SlimeToraは単一メンテナープロジェクト。破綻リスクがある。docs/haritora-protocol.mdに既にプロトコル仕様あり
+- **Effort:** L（CC: 2時間）
+- **Priority:** P2
+- **Depends on:** v0.1リリース後
+- **Context:** CEO Subagent #2指摘。「最も弱いリンク」
+
 ### 複数IMUトラッカー対応（SlimeVR, Tundra等）
 - **What:** HaritoraX2以外のIMUトラッカーからのOSCデータ受信対応
-- **Why:** 12ヶ月理想状態の一部。ユーザーベース拡大
-- **Context:** CEO Subagentも「IMU入力インターフェースの抽象化」を推奨
+- **Why:** リブランド後の自然な拡張。ユーザーベース拡大
+- **Context:** CEO Subagent #1, #2とも推奨
 - **Effort:** M（CC: 1時間）
 - **Priority:** P3
-- **Depends on:** Phase 2完了
+- **Depends on:** リブランド完了後
 
 ### N台カメラ対応
 - **What:** 2台以上のカメラをサポート
