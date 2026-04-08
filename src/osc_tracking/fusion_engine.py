@@ -32,6 +32,8 @@ Architecture:
 import logging
 import time
 
+import numpy as np
+
 from .camera_tracker import CameraTracker
 from .complementary_filter import JOINT_NAMES, ComplementaryFilter
 from .osc_receiver import OSCReceiver
@@ -127,7 +129,7 @@ class FusionEngine:
                     confidence=confidence,
                     dt=dt,
                 )
-            except Exception:
+            except (ValueError, RuntimeError, np.linalg.LinAlgError):
                 logger.exception("Filter update failed for %s — resetting", joint_name)
                 self.filter.reset_joint(joint_name)
                 state = self.filter.joints[joint_name]
