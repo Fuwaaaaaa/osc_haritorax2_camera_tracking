@@ -4,7 +4,6 @@
 
 ### 1. 依存関係インストール
 ```bash
-cd C:\project\test_branch\OSC_tracking
 pip install -e ".[dev]"
 ```
 
@@ -49,9 +48,15 @@ python -m osc_tracking.tools.calibrate --cam1 0 --cam2 1
 python -m osc_tracking.main
 ```
 
-### 方法B: 直接テスト（OSC受信確認）
+### 方法B: 接続確認ツール
 
-HaritoraX2のOSCデータが来ているか確認するスクリプト:
+SlimeVR ServerからOSCデータが来ているか確認:
+```bash
+python -m osc_tracking.tools.connection_check
+```
+30秒間受信し、トラッカー数、メッセージレート、健全性を評価。
+
+より詳細なOSCパケットモニタリング:
 ```bash
 python -m osc_tracking.tools.osc_monitor
 ```

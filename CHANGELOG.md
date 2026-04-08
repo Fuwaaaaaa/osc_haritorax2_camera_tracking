@@ -38,8 +38,12 @@ HaritoraX2 + デュアルWebカメラのセンサーフュージョンによるV
 - CI: lint (ruff) + typecheck (mypy) + test (Python 3.10/3.11/3.12)
 - 共有メモリLock同期 + PID付き命名（多重起動防止）
 
+### デザイン
+- **DESIGN.md**: Retro-Futuristic + Industrialデザインシステム（シアンアクセント#06b6d4、Cabinet Grotesk + Geist + JetBrains Mono）
+
 ### ドキュメント
 - README（セットアップガイド、CLI全オプション、アーキテクチャ図）
 - HaritoraX2プロトコル仕様（docs/haritora-protocol.md）
 - E2Eテストチェックリスト（docs/e2e-test-checklist.md）
 - QUICKSTART
+- DESIGN.md（デザインシステム定義）

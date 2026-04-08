@@ -10,7 +10,7 @@ HaritoraX2 + デュアルWebカメラのセンサーフュージョンによるV
 ## Architecture
 - 2プロセス構成: カメラサブプロセス(MediaPipe) + メインプロセス(フュージョン+OSC)
 - 相補フィルタ（MEKF不使用）
-- 6モードステートマシン
+- 5モードステートマシン
 - HaritoraX2はBLE/Serial通信（OSCではない）。SlimeTora→SlimeVR Server→OSC経由で接続
 
 ## Testing
@@ -30,12 +30,13 @@ python -m osc_tracking.tools.osc_monitor              # OSCデバッグ
 python -m osc_tracking.tools.download_model           # MediaPipeモデルDL
 python -m osc_tracking.tools.generate_checkerboard    # チェッカーボード生成
 python -m osc_tracking.tools.connection_check         # SlimeVR OSC接続確認
+python -m osc_tracking.tools.simulate                 # シミュレーションモード
 ```
 
 ## Key Files
 - `src/osc_tracking/fusion_engine.py` — メインループ
 - `src/osc_tracking/complementary_filter.py` — センサーフュージョン
-- `src/osc_tracking/state_machine.py` — 6モードステートマシン
+- `src/osc_tracking/state_machine.py` — 5モードステートマシン
 - `src/osc_tracking/camera_tracker.py` — デュアルカメラ+MediaPipe
 - `src/osc_tracking/stereo_calibration.py` — 三角測量
 - `config/default.json` — 設定ファイル
