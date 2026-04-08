@@ -52,10 +52,9 @@ class OSCRemapper:
     """Remaps joint names to application-specific OSC addresses."""
 
     def __init__(self, profile_name: str = "vrchat"):
-        self._profile = DEFAULT_PROFILES.get(profile_name)
-        if self._profile is None:
+        self._profile: OSCProfile = DEFAULT_PROFILES.get(profile_name) or DEFAULT_PROFILES["vrchat"]
+        if profile_name not in DEFAULT_PROFILES:
             logger.warning("Unknown profile '%s', using vrchat", profile_name)
-            self._profile = DEFAULT_PROFILES["vrchat"]
 
     @property
     def profile(self) -> OSCProfile:

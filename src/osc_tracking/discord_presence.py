@@ -34,6 +34,7 @@ class DiscordPresence:
             return
         try:
             self._rpc = Presence(self._app_id)
+            assert self._rpc is not None
             self._rpc.connect()
             self._connected = True
             self._rpc.update(

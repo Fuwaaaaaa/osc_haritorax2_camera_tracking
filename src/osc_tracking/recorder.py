@@ -29,7 +29,8 @@ class TrackingRecorder:
 
     def __init__(self, output_dir: str = "recordings"):
         self.output_dir = Path(output_dir)
-        self._file = None
+        from typing import IO
+        self._file: IO[str] | None = None
         self._start_time = 0.0
         self._frame_count = 0
 
@@ -48,7 +49,8 @@ class TrackingRecorder:
         if self._file is None:
             return
 
-        frame = {
+        from typing import Any
+        frame: dict[str, Any] = {
             "t": round(time.monotonic() - self._start_time, 4),
             "mode": mode,
             "joints": {},

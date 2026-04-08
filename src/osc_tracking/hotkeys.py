@@ -45,9 +45,10 @@ class HotkeyManager:
                 if key_str == binding or (hasattr(key, 'name') and f"<{key.name}>" == binding):
                     self._fire(action)
 
-        self._listener = keyboard.Listener(on_press=on_press)
-        self._listener.daemon = True
-        self._listener.start()
+        listener = keyboard.Listener(on_press=on_press)
+        listener.daemon = True  # type: ignore[attr-defined]
+        listener.start()
+        self._listener = listener
         logger.info("Hotkeys active: %s", ", ".join(f"{k}→{v}" for k, v in self._bindings.items()))
 
     def stop(self) -> None:

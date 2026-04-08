@@ -58,7 +58,11 @@ def main() -> None:
     parser.add_argument("--api-port", type=int, default=8766, help="REST API port")
     parser.add_argument("--remap", type=str, help="OSC address remap profile (vrchat/resonite/chilloutvr)")
     parser.add_argument("--bvh", type=str, help="Export BVH file to path")
-    parser.add_argument("--smoothing", type=str, choices=["default", "anime", "realistic", "dance", "sleep"], help="Motion smoothing preset")
+    parser.add_argument(
+        "--smoothing", type=str,
+        choices=["default", "anime", "realistic", "dance", "sleep"],
+        help="Motion smoothing preset",
+    )
     args = parser.parse_args()
 
     # Load config
@@ -151,9 +155,9 @@ def main() -> None:
         api = RestAPI(port=args.api_port)
 
     # OSC address remapper
-    remapper = None
     if args.remap:
         remapper = OSCRemapper(profile_name=args.remap)
+        logger.info("OSC remap profile: %s", remapper.profile.name)
 
     # Motion smoothing preset
     if args.smoothing:
@@ -169,7 +173,7 @@ def main() -> None:
     bvh = None
     if args.bvh:
         from .bvh_exporter import BVHExporter
-        bvh = BVHExporter(output_path=args.bvh)
+        bvh = BVHExporter()
 
     def shutdown(sig, frame):
         logger.info("Shutting down...")

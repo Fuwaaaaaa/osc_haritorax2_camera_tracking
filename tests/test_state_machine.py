@@ -103,23 +103,6 @@ class TestBothCamerasLost:
         mode = sm.update(0.0, 0.0)
         assert mode == TrackingMode.FULL_OCCLUSION
 
-
-class TestHysteresis:
-    def test_rapid_mode_switch_prevented(self, sm_with_hysteresis):
-        now = time.monotonic()
-        sm_with_hysteresis.update(0.9, 0.9, now=now)
-        assert sm_with_hysteresis.mode == TrackingMode.VISIBLE
-
-        # Drop confidence — should NOT immediately switch
-        sm_with_hysteresis.update(0.1, 0.1, now=now + 0.1)
-        assert sm_with_hysteresis.mode == TrackingMode.VISIBLE  # Still visible
-
-        # After hysteresis period
-        sm_with_hysteresis.update(0.1, 0.1, now=now + 0.7)
-        assert sm_with_hysteresis.mode == TrackingMode.FULL_OCCLUSION
-
-
-class TestBothCamerasLost:
     def test_both_cameras_zero_bypasses_hysteresis(self, sm):
         """Both cameras at 0.0 should immediately enter FULL_OCCLUSION."""
         sm.config.hysteresis_sec = 10.0  # Long hysteresis
@@ -144,6 +127,21 @@ class TestBothCamerasLost:
 
         mode = sm.update(0.0, 0.0)  # Both lost
         assert mode == TrackingMode.FULL_OCCLUSION
+
+
+class TestHysteresis:
+    def test_rapid_mode_switch_prevented(self, sm_with_hysteresis):
+        now = time.monotonic()
+        sm_with_hysteresis.update(0.9, 0.9, now=now)
+        assert sm_with_hysteresis.mode == TrackingMode.VISIBLE
+
+        # Drop confidence — should NOT immediately switch
+        sm_with_hysteresis.update(0.1, 0.1, now=now + 0.1)
+        assert sm_with_hysteresis.mode == TrackingMode.VISIBLE  # Still visible
+
+        # After hysteresis period
+        sm_with_hysteresis.update(0.1, 0.1, now=now + 0.7)
+        assert sm_with_hysteresis.mode == TrackingMode.FULL_OCCLUSION
 
 
 class TestSmoothRecovery:

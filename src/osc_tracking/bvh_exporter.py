@@ -6,6 +6,7 @@ MotionBuilder, Unity, etc.
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -13,7 +14,7 @@ from scipy.spatial.transform import Rotation
 logger = logging.getLogger(__name__)
 
 # Simplified skeleton hierarchy for BVH
-BVH_HIERARCHY = {
+BVH_HIERARCHY: dict[str, dict[str, Any]] = {
     "Hips": {"parent": None, "offset": (0, 100, 0)},
     "Chest": {"parent": "Hips", "offset": (0, 30, 0)},
     "Head": {"parent": "Chest", "offset": (0, 30, 0)},

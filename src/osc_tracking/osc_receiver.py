@@ -18,11 +18,11 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-logger = logging.getLogger(__name__)
-
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
 from scipy.spatial.transform import Rotation
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -124,6 +124,7 @@ class OSCReceiver:
                 raise
 
         self._running = True
+        assert self._server is not None
         self._thread = threading.Thread(
             target=self._server.serve_forever,
             daemon=True,
