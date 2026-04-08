@@ -17,28 +17,65 @@ _latest_state: dict = {}
 _lock = threading.Lock()
 
 DASHBOARD_HTML = """<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>OSC Tracking Dashboard</title>
+<html lang="ja"><head><meta charset="utf-8"><title>OSC Tracking Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-body{font-family:system-ui;background:#111;color:#eee;margin:2em;max-width:800px}
-h1{color:#8b5cf6}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1em;margin:1em 0}
-.card{background:#1e1e2e;border-radius:8px;padding:1em;text-align:center}
-.card .value{font-size:2em;font-weight:bold}
-.green{color:#22c55e}.yellow{color:#eab308}.red{color:#ef4444}.gray{color:#6b7280}
-.joint{background:#1e1e2e;border-radius:4px;padding:0.5em;margin:0.2em 0;
-  display:flex;justify-content:space-between}
-.bar{height:8px;background:#333;border-radius:4px;flex:1;margin-left:1em}
-.bar-fill{height:100%;border-radius:4px;transition:width 0.3s}
-#log{background:#0a0a0a;padding:1em;border-radius:8px;max-height:200px;
-  overflow-y:auto;font-family:monospace;font-size:0.85em}
+:root{
+  --bg-base:#0a0a0f;--bg-surface:#12121a;--bg-elevated:#1a1a26;--bg-hover:#22222e;
+  --text-primary:#e8e8ed;--text-secondary:#9898a8;--text-muted:#5a5a6e;
+  --accent:#06b6d4;--accent-glow:rgba(6,182,212,0.15);
+  --green:#22c55e;--yellow:#eab308;--red:#ef4444;--border:#2a2a38;
+  --font-body:'Geist',system-ui,sans-serif;--font-mono:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font-body);background:var(--bg-base);color:var(--text-primary);
+  padding:24px;max-width:960px;margin:0 auto;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;
+  background:linear-gradient(rgba(6,182,212,0.03) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(6,182,212,0.03) 1px,transparent 1px);
+  background-size:48px 48px;pointer-events:none;z-index:0}
+body>*{position:relative;z-index:1}
+h1{font-family:var(--font-body);font-weight:700;font-size:1.1rem;color:var(--accent);
+  padding:16px 0;border-bottom:1px solid var(--border);margin-bottom:16px;
+  display:flex;align-items:center;justify-content:space-between}
+h1 .status{font-family:var(--font-mono);font-size:0.8rem;display:flex;align-items:center;gap:8px}
+h1 .status::before{content:'';width:8px;height:8px;border-radius:50%;
+  background:var(--green);box-shadow:0 0 8px var(--green)}
+h2{font-family:var(--font-mono);font-weight:500;font-size:0.7rem;text-transform:uppercase;
+  letter-spacing:0.08em;color:var(--text-muted);margin:24px 0 8px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.card-label{font-family:var(--font-mono);font-size:0.7rem;text-transform:uppercase;
+  letter-spacing:0.08em;color:var(--text-muted);margin-bottom:4px}
+.card-value{font-family:var(--font-mono);font-size:1.8rem;font-weight:700;
+  font-variant-numeric:tabular-nums}
+.card-unit{font-size:0.8rem;font-weight:400;color:var(--text-muted);margin-left:2px}
+.green{color:var(--green)}.yellow{color:var(--yellow)}.red{color:var(--red)}
+.cyan{color:var(--accent)}
+.joint{background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;
+  padding:8px 12px;margin:3px 0;display:flex;align-items:center;gap:12px}
+.joint-name{font-family:var(--font-mono);font-size:0.8rem;width:100px;color:var(--text-secondary)}
+.bar{flex:1;height:6px;background:var(--bg-hover);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width 0.3s ease-out}
+.joint-conf{font-family:var(--font-mono);font-size:0.75rem;width:80px;text-align:right;
+  font-variant-numeric:tabular-nums}
+#log{background:var(--bg-surface);border:1px solid var(--border);padding:12px;
+  border-radius:8px;max-height:160px;overflow-y:auto;
+  font-family:var(--font-mono);font-size:0.75rem;line-height:1.8;color:var(--text-muted)}
+.log-mode{color:var(--accent)}.log-val{color:var(--text-primary)}
 </style></head><body>
-<h1>OSC Tracking Dashboard</h1>
+<h1>OSC Tracking<span class="status" id="status">Waiting...</span></h1>
 <div class="grid">
-  <div class="card"><div>Mode</div><div class="value" id="mode">---</div></div>
-  <div class="card"><div>FPS</div><div class="value" id="fps">0</div></div>
-  <div class="card"><div>Confidence</div><div class="value" id="conf">0%</div></div>
+  <div class="card"><div class="card-label">Mode</div>
+    <div class="card-value" id="mode">---</div></div>
+  <div class="card"><div class="card-label">FPS</div>
+    <div class="card-value cyan" id="fps">0</div></div>
+  <div class="card"><div class="card-label">Confidence</div>
+    <div class="card-value" id="conf">0<span class="card-unit">%</span></div></div>
 </div>
-<h2>Joints</h2>
+<h2>Joint Tracking</h2>
 <div id="joints"></div>
 <h2>Log</h2>
 <div id="log"></div>
@@ -46,26 +83,36 @@ h1{color:#8b5cf6}
 const es=new EventSource('/events');
 es.onmessage=e=>{
   const d=JSON.parse(e.data);
-  document.getElementById('mode').textContent=d.mode||'---';
-  const modeLabel=d.mode==='VISIBLE'?'GOOD':d.mode==='FULL_OCCLUSION'||d.mode==='IMU_DISCONNECTED'?'ERROR':'WARNING';
-  document.getElementById('mode').textContent=d.mode+' ('+modeLabel+')';
-  document.getElementById('mode').className='value '+(
-    d.mode==='VISIBLE'?'green':d.mode==='FULL_OCCLUSION'?'red':'yellow');
+  const ml=d.mode==='VISIBLE'?'GOOD':
+    d.mode==='FULL_OCCLUSION'||d.mode==='IMU_DISCONNECTED'?'ERROR':'WARNING';
+  const mc=d.mode==='VISIBLE'?'green':d.mode==='FULL_OCCLUSION'?'red':'yellow';
+  document.getElementById('mode').textContent=d.mode+' ('+ml+')';
+  document.getElementById('mode').className='card-value '+mc;
   document.getElementById('fps').textContent=Math.round(d.fps||0);
-  document.getElementById('conf').textContent=Math.round((d.avg_conf||0)*100)+'%';
+  const confEl=document.getElementById('conf');
+  confEl.innerHTML=Math.round((d.avg_conf||0)*100)+'<span class="card-unit">%</span>';
+  confEl.className='card-value '+(d.avg_conf>0.7?'green':d.avg_conf>0.3?'yellow':'red');
+  const st=document.getElementById('status');
+  st.textContent=ml;
+  st.style.color=mc==='green'?'var(--green)':mc==='red'?'var(--red)':'var(--yellow)';
+  st.style.setProperty('--dot',mc==='green'?'var(--green)':mc==='red'?'var(--red)':'var(--yellow)');
+  if(st.querySelector('::before'))st.querySelector('::before').style.background=st.style.color;
   const jc=document.getElementById('joints');
   if(d.joints){
     jc.innerHTML='';
     for(const[name,j]of Object.entries(d.joints)){
-      const c=j.conf>0.7?'#22c55e':j.conf>0.3?'#eab308':'#ef4444';
+      const c=j.conf>0.7?'var(--green)':j.conf>0.3?'var(--yellow)':'var(--red)';
+      const cc=j.conf>0.7?'green':j.conf>0.3?'yellow':'red';
       const lbl=j.conf>0.7?'GOOD':j.conf>0.3?'WARN':'LOW';
-      jc.innerHTML+=`<div class="joint"><span>${name}</span>
-        <div class="bar"><div class="bar-fill" style="width:${j.conf*100}%;background:${c}"></div></div>
-        <span style="width:5em;text-align:right">${(j.conf*100).toFixed(0)}% ${lbl}</span></div>`;
+      jc.innerHTML+=`<div class="joint"><span class="joint-name">${name}</span>`+
+        `<div class="bar"><div class="bar-fill" style="width:${j.conf*100}%;background:${c}"></div></div>`+
+        `<span class="joint-conf ${cc}">${(j.conf*100).toFixed(0)}% ${lbl}</span></div>`;
     }
   }
   const log=document.getElementById('log');
-  log.innerHTML+=d.mode+' conf='+((d.avg_conf||0)*100).toFixed(0)+'%\\n';
+  const ts=new Date().toLocaleTimeString('ja-JP',{hour12:false});
+  log.innerHTML+=`<div>${ts} <span class="log-mode">${d.mode}</span> `+
+    `conf=<span class="log-val">${((d.avg_conf||0)*100).toFixed(0)}%</span></div>`;
   log.scrollTop=log.scrollHeight;
 };
 </script></body></html>"""
