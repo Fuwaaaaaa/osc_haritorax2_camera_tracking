@@ -254,6 +254,7 @@ def main() -> None:
     frame_duration = 1.0 / cfg.target_fps
     frame_count = 0
     last_status = time.monotonic()
+    prev_mode = TrackingMode.VISIBLE
 
     try:
         while True:
@@ -267,25 +268,31 @@ def main() -> None:
             else:
                 mode = TrackingMode.IMU_DISCONNECTED  # Camera-less mode
 
-            # Gesture detection
-            if gesture and not args.no_camera:
-                camera_joints = camera.read_joints()
-                if camera_joints:
-                    joint_positions = {
-                        name: pos for name, (pos, _) in camera_joints.items()
-                    }
-                    detected = gesture.update(joint_positions)
-                    if detected:
-                        logger.info("Gesture detected: %s", detected)
-
-            # Update optional subsystems
+            # Read camera data ONCE per frame (avoid repeated Lock + copy)
+            cj = camera.read_joints() if not args.no_camera else None
             avg_conf = 0.0
-            if not args.no_camera:
-                camera_joints = camera.read_joints()
-                if camera_joints:
-                    confs = [c for _, c in camera_joints.values()]
-                    avg_conf = sum(confs) / len(confs) if confs else 0.0
+            if cj:
+                confs = [c for _, c in cj.values()]
+                avg_conf = sum(confs) / len(confs) if confs else 0.0
 
+            fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
+
+            # Helper: get rotation for a joint, fallback to identity
+            def _get_rot(name: str):
+                rot = receiver.get_bone_rotation(name)
+                if rot is None:
+                    from scipy.spatial.transform import Rotation
+                    return Rotation.identity()
+                return rot
+
+            # Gesture detection
+            if gesture and cj:
+                joint_positions = {name: pos for name, (pos, _) in cj.items()}
+                detected = gesture.update(joint_positions)
+                if detected:
+                    logger.info("Gesture detected: %s", detected)
+
+            # Tray icon
             if tray:
                 if mode == TrackingMode.VISIBLE:
                     level = QualityLevel.GOOD
@@ -295,82 +302,52 @@ def main() -> None:
                     level = QualityLevel.ERROR
                 else:
                     level = QualityLevel.OFFLINE
-                fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
                 tray.update(level, mode.name, fps_now)
 
+            # Dashboard
             if dashboard:
-                joint_data = {}
-                if not args.no_camera:
-                    cj = camera.read_joints()
-                    if cj:
-                        joint_data = {name: {"conf": c} for name, (_, c) in cj.items()}
-                fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
+                joint_data = {name: {"conf": c} for name, (_, c) in cj.items()} if cj else {}
                 dashboard.update(mode.name, fps_now, avg_conf, joint_data)
 
-            if recorder and not args.no_camera:
-                cj = camera.read_joints()
-                if cj:
-                    rec_data = {}
-                    for name, (pos, conf) in cj.items():
-                        rot = receiver.get_bone_rotation(name)
-                        if rot is None:
-                            from scipy.spatial.transform import Rotation
-                            rot = Rotation.identity()
-                        rec_data[name] = (pos, rot, conf)
-                    recorder.record_frame(rec_data, mode.name)
+            # Recorder
+            if recorder and cj:
+                rec_data = {name: (pos, _get_rot(name), conf) for name, (pos, conf) in cj.items()}
+                recorder.record_frame(rec_data, mode.name)
 
-            # VMC Protocol output
-            if vmc_sender and not args.no_camera:
-                cj = camera.read_joints()
-                if cj:
-                    vmc_data = {}
-                    for name, (pos, conf) in cj.items():
-                        rot = receiver.get_bone_rotation(name)
-                        if rot is None:
-                            from scipy.spatial.transform import Rotation
-                            rot = Rotation.identity()
-                        vmc_data[name] = (pos, rot)
-                    vmc_sender.send_frame(vmc_data)
+            # VMC Protocol
+            if vmc_sender and cj:
+                vmc_data = {name: (pos, _get_rot(name)) for name, (pos, _) in cj.items()}
+                vmc_sender.send_frame(vmc_data)
 
             # BVH recording
-            if bvh and not args.no_camera:
-                cj = camera.read_joints()
-                if cj:
-                    bvh_data = {}
-                    for name, (pos, conf) in cj.items():
-                        rot = receiver.get_bone_rotation(name)
-                        if rot is None:
-                            from scipy.spatial.transform import Rotation
-                            rot = Rotation.identity()
-                        bvh_data[name] = (pos, rot)
-                    bvh.add_frame(bvh_data)
+            if bvh and cj:
+                bvh_data = {name: (pos, _get_rot(name)) for name, (pos, _) in cj.items()}
+                bvh.add_frame(bvh_data)
 
             # Skeleton viewer
-            if viewer and not args.no_camera:
-                cj = camera.read_joints()
-                if cj:
-                    viewer.update({name: pos for name, (pos, _) in cj.items()})
+            if viewer and cj:
+                viewer.update({name: pos for name, (pos, _) in cj.items()})
 
             # Discord presence
             if discord:
-                fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
                 discord.update(mode.name, fps_now)
 
-            # REST API state
+            # REST API
             if api:
-                fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
-                joint_data = {}
-                if not args.no_camera:
-                    cj = camera.read_joints()
-                    if cj:
-                        joint_data = {name: {"conf": c} for name, (_, c) in cj.items()}
+                joint_data = {name: {"conf": c} for name, (_, c) in cj.items()} if cj else {}
                 api.update(mode.name, fps_now, joint_data)
 
-            # Notifications
-            if mode == TrackingMode.IMU_DISCONNECTED:
-                notifier.notify_disconnect()
-            elif mode == TrackingMode.FULL_OCCLUSION:
-                notifier.notify_camera_lost(0)
+            # Notifications — only on mode change
+            if mode != prev_mode:
+                if mode == TrackingMode.IMU_DISCONNECTED:
+                    notifier.notify_disconnect()
+                elif mode == TrackingMode.FULL_OCCLUSION:
+                    notifier.notify_camera_lost(0)
+                elif mode == TrackingMode.VISIBLE and prev_mode == TrackingMode.IMU_DISCONNECTED:
+                    notifier.notify_reconnect()
+                elif mode == TrackingMode.VISIBLE and prev_mode == TrackingMode.FULL_OCCLUSION:
+                    notifier.notify_camera_recovered(0)
+                prev_mode = mode
 
             if profiler:
                 profiler.end_frame()

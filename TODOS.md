@@ -64,6 +64,13 @@
 - **Priority:** P3
 - **Depends on:** Phase 4完了
 
+### main.pyリファクタ（SubsystemManager）
+- **What:** main.pyのサブシステム初期化・更新・シャットダウンをSubsystemManagerクラスに抽出
+- **Why:** 現在245LOC。モジュール追加のたびに肥大化する構造。start/update/stopのライフサイクルが統一されていない
+- **Effort:** S（CC: 30分）
+- **Priority:** P3
+- **Context:** Eng Reviewで指摘。現状は動作に問題なし
+
 ### ステレオカメラ深度精度検証
 - **What:** 2台Webカメラ（0.5-1m間隔）で2-3m先の被写体の三角測量精度を実測
 - **Why:** CEO Subagentが指摘。消費者向けWebカメラの深度分解能は未検証
