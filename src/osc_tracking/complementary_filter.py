@@ -29,6 +29,7 @@ class JointState:
     velocity: np.ndarray = field(default_factory=lambda: np.zeros(3))
     last_valid_position: np.ndarray = field(default_factory=lambda: np.zeros(3))
     last_valid_rotation: Rotation = field(default_factory=lambda: Rotation.identity())
+    stationary_timer: float = 0.0
 
 
 # Tracked joints — matches HaritoraX2 tracker layout + camera-derived joints.
@@ -64,7 +65,6 @@ class ComplementaryFilter:
         self.joints: dict[str, JointState] = {
             name: JointState() for name in JOINT_NAMES
         }
-        self._stationary_timer: float = 0.0
 
     def update(
         self,
@@ -126,12 +126,13 @@ class ComplementaryFilter:
         # Rotation update
         if imu_rotation is not None:
             if camera_position is not None and confidence > 0.7:
-                # Visible mode: blend camera hint with IMU
+                # Visible mode: blend current rotation toward IMU using Slerp
                 alpha = self._smooth_alpha(dt)
-                state.rotation = Rotation.from_rotvec(
-                    state.rotation.as_rotvec() * (1 - alpha * 0.3)
-                    + imu_rotation.as_rotvec() * (alpha * 0.3 + (1 - alpha))
-                )
+                blend = alpha * 0.3
+                from scipy.spatial.transform import Slerp as ScipySlerp
+                key_rots = Rotation.concatenate([state.rotation, imu_rotation])
+                slerp = ScipySlerp([0.0, 1.0], key_rots)
+                state.rotation = slerp(blend)
             else:
                 # Partial/Full: trust IMU for rotation
                 state.rotation = imu_rotation
@@ -160,10 +161,10 @@ class ComplementaryFilter:
         """Suppress velocity when stationary for extended period."""
         speed = np.linalg.norm(state.velocity)
         if speed < self.DRIFT_VELOCITY_THRESHOLD:
-            self._stationary_timer += dt
-            if self._stationary_timer >= self.DRIFT_HOLD_SECONDS:
+            state.stationary_timer += dt
+            if state.stationary_timer >= self.DRIFT_HOLD_SECONDS:
                 # Decay velocity toward zero
                 decay = math.exp(-dt / 2.0)
                 state.velocity *= decay
         else:
-            self._stationary_timer = 0.0
+            state.stationary_timer = 0.0
