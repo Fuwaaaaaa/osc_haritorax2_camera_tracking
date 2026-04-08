@@ -83,23 +83,25 @@ class CameraTracker:
         self._process: mp.Process | None = None
         self._shm: shared_memory.SharedMemory | None = None
         self._running = mp.Event()
+        self._shm_lock = mp.Lock()
 
     def start(self) -> None:
         """Start the camera subprocess."""
         if self._process and self._process.is_alive():
             return
 
+        self._shm_name = f"{SHM_NAME}_{mp.current_process().pid}"
         try:
             self._shm = shared_memory.SharedMemory(
-                name=SHM_NAME, create=True, size=SHM_SIZE
+                name=self._shm_name, create=True, size=SHM_SIZE
             )
         except FileExistsError:
-            self._shm = shared_memory.SharedMemory(name=SHM_NAME, create=False)
+            self._shm = shared_memory.SharedMemory(name=self._shm_name, create=False)
 
         self._running.set()
         self._process = mp.Process(
             target=_camera_worker,
-            args=(self.config, SHM_NAME, self._running),
+            args=(self.config, self._shm_name, self._running, self._shm_lock),
             daemon=True,
             name="camera-tracker",
         )
@@ -143,12 +145,15 @@ class CameraTracker:
 
         from .complementary_filter import JOINT_NAMES
 
+        with self._shm_lock:
+            snapshot = buf.copy()
+
         results = {}
         now = time.monotonic()
         for i, name in enumerate(JOINT_NAMES):
             if i >= JOINT_COUNT:
                 break
-            x, y, z, conf, ts = buf[i]
+            x, y, z, conf, ts = snapshot[i]
             if not np.isfinite(x) or (now - ts) > 0.5:
                 continue
             results[name] = (np.array([x, y, z]), float(conf))
@@ -164,6 +169,7 @@ def _camera_worker(
     config: CameraConfig,
     shm_name: str,
     running: "mp.synchronize.Event",  # type: ignore[name-defined]
+    shm_lock: "mp.synchronize.Lock",  # type: ignore[name-defined]
 ) -> None:
     """Camera subprocess entry point.
 
@@ -281,22 +287,26 @@ def _camera_worker(
                     lm1 = result1.pose_landmarks[0]
                     lm2 = result2.pose_landmarks[0]
 
-                    _process_landmarks(
-                        buf, lm1, lm2, calib, config.resolution, now
-                    )
+                    with shm_lock:
+                        _process_landmarks(
+                            buf, lm1, lm2, calib, config.resolution, now
+                        )
                 else:
                     # No pose detected — write zero confidence
-                    for i in range(JOINT_COUNT):
-                        buf[i] = [0.0, 0.0, 0.0, 0.0, now]
+                    with shm_lock:
+                        for i in range(JOINT_COUNT):
+                            buf[i] = [0.0, 0.0, 0.0, 0.0, now]
 
             except Exception as e:
                 logging.warning("MediaPipe inference failed: %s", e)
-                for i in range(JOINT_COUNT):
-                    buf[i] = [0.0, 0.0, 0.0, 0.0, now]
+                with shm_lock:
+                    for i in range(JOINT_COUNT):
+                        buf[i] = [0.0, 0.0, 0.0, 0.0, now]
         else:
             # No MediaPipe — write zeros
-            for i in range(JOINT_COUNT):
-                buf[i] = [0.0, 0.0, 0.0, 0.0, now]
+            with shm_lock:
+                for i in range(JOINT_COUNT):
+                    buf[i] = [0.0, 0.0, 0.0, 0.0, now]
 
         # Frame rate control
         elapsed = time.monotonic() - loop_start
