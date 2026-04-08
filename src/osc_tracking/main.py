@@ -6,6 +6,8 @@ import signal
 import sys
 import time
 
+from scipy.spatial.transform import Rotation
+
 from .camera_tracker import CameraConfig, CameraTracker
 from .config import TrackingConfig
 from .fusion_engine import FusionEngine
@@ -280,10 +282,7 @@ def main() -> None:
             # Helper: get rotation for a joint, fallback to identity
             def _get_rot(name: str):
                 rot = receiver.get_bone_rotation(name)
-                if rot is None:
-                    from scipy.spatial.transform import Rotation
-                    return Rotation.identity()
-                return rot
+                return rot if rot is not None else Rotation.identity()
 
             # Gesture detection
             if gesture and cj:
