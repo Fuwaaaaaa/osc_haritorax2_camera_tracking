@@ -40,7 +40,7 @@ RESET = "\033[0m"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="OSC Tracking — HaritoraX2 + Dual WebCam")
+    parser = argparse.ArgumentParser(description="OSC Tracking  - HaritoraX2 + Dual WebCam")
     parser.add_argument("--config", type=str, help="Path to config JSON file")
     parser.add_argument("--cam1", type=int, help="Camera 1 index")
     parser.add_argument("--cam2", type=int, help="Camera 2 index")
@@ -207,7 +207,7 @@ def main() -> None:
 
     # Print startup info
     print("=" * 50)
-    print("  OSC Tracking — HaritoraX2 + Dual WebCam")
+    print("  OSC Tracking  - HaritoraX2 + Dual WebCam")
     print("=" * 50)
     print(f"  Cameras: {cfg.cam1_index}, {cfg.cam2_index} @ {cfg.camera_resolution}")
     print(f"  OSC receive: {cfg.osc_receive_host}:{cfg.osc_receive_port}")
@@ -336,7 +336,7 @@ def main() -> None:
                 joint_data = {name: {"conf": c} for name, (_, c) in cj.items()} if cj else {}
                 api.update(mode.name, fps_now, joint_data)
 
-            # Notifications — only on mode change
+            # Notifications  - only on mode change
             if mode != prev_mode:
                 if mode == TrackingMode.IMU_DISCONNECTED:
                     notifier.notify_disconnect()

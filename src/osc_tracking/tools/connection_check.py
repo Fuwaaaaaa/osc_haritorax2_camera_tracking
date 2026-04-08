@@ -1,4 +1,4 @@
-"""Connection check tool — verify SlimeVR Server OSC output.
+"""Connection check tool  - verify SlimeVR Server OSC output.
 
 Listens for OSC messages and reports what's coming in.
 Use this before running the full tracker to confirm SlimeTora + SlimeVR
@@ -27,7 +27,7 @@ RESET = "\033[0m"
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="OSC Connection Check — verify SlimeVR Server output"
+        description="OSC Connection Check  - verify SlimeVR Server output"
     )
     parser.add_argument("--host", default="127.0.0.1", help="Listen host")
     parser.add_argument("--port", type=int, default=6969, help="Listen port")
@@ -135,12 +135,12 @@ def main() -> None:
     rotation_addresses = [a for a in stats if "rotation" in a]
 
     if len(rotation_addresses) >= 6:
-        print(f"  {GREEN}HEALTH: GOOD — {len(rotation_addresses)} rotation trackers detected{RESET}")
+        print(f"  {GREEN}HEALTH: GOOD  - {len(rotation_addresses)} rotation trackers detected{RESET}")
     elif len(rotation_addresses) >= 1:
-        print(f"  {YELLOW}HEALTH: PARTIAL — only {len(rotation_addresses)} rotation trackers{RESET}")
+        print(f"  {YELLOW}HEALTH: PARTIAL  - only {len(rotation_addresses)} rotation trackers{RESET}")
         print("  Expected 8 trackers from HaritoraX2")
     else:
-        print(f"  {RED}HEALTH: NO ROTATION DATA — check SlimeVR Server OSC config{RESET}")
+        print(f"  {RED}HEALTH: NO ROTATION DATA  - check SlimeVR Server OSC config{RESET}")
 
     print()
     print(f"  Total unique addresses: {unique_addresses}")
