@@ -159,3 +159,77 @@ class TestSaveLoad:
     def test_load_nonexistent_returns_none(self, tmp_path):
         result = load_calibration(tmp_path / "nonexistent.npz")
         assert result is None
+
+    def test_save_creates_parent_directory(self, synthetic_calib, tmp_path):
+        """save_calibration should create missing parent directories."""
+        nested_path = tmp_path / "a" / "b" / "c" / "calib.npz"
+        save_calibration(synthetic_calib, nested_path)
+
+        loaded = load_calibration(nested_path)
+        assert loaded is not None
+        np.testing.assert_allclose(loaded.K1, synthetic_calib.K1)
+        np.testing.assert_allclose(loaded.T, synthetic_calib.T)
+
+    def test_load_corrupt_file_returns_none(self, tmp_path):
+        """Loading a corrupt .npz file should return None (not crash)."""
+        corrupt_path = tmp_path / "corrupt.npz"
+        corrupt_path.write_bytes(b"this is not a valid npz file at all")
+
+        result = load_calibration(corrupt_path)
+        assert result is None
+
+
+class TestTriangulationEdgeCases:
+    def test_triangulate_far_point(self, synthetic_calib):
+        """A point 10m away should still triangulate correctly."""
+        point_3d = np.array([0.5, -0.3, 10.0])
+
+        pt1 = project_point(
+            synthetic_calib.K1, np.eye(3), np.zeros((3, 1)), point_3d
+        )
+        pt2 = project_point(
+            synthetic_calib.K2, synthetic_calib.R, synthetic_calib.T, point_3d
+        )
+
+        result = triangulate_points(
+            synthetic_calib,
+            pt1.reshape(1, 2),
+            pt2.reshape(1, 2),
+        )
+
+        np.testing.assert_allclose(result[0], point_3d, atol=0.1)
+
+    def test_reprojection_error_noisy_data(self, synthetic_calib):
+        """Reprojection error should stay reasonable with noisy 2D points."""
+        rng = np.random.default_rng(42)
+        points_3d = np.array([
+            [0.1, -0.1, 2.0],
+            [0.0, 0.2, 3.0],
+            [-0.2, 0.0, 1.5],
+        ])
+
+        pts1 = []
+        pts2 = []
+        for pt in points_3d:
+            p1 = project_point(
+                synthetic_calib.K1, np.eye(3), np.zeros((3, 1)), pt
+            )
+            p2 = project_point(
+                synthetic_calib.K2, synthetic_calib.R, synthetic_calib.T, pt
+            )
+            # Add Gaussian noise (std=1 pixel)
+            pts1.append(p1 + rng.normal(0, 1.0, size=2))
+            pts2.append(p2 + rng.normal(0, 1.0, size=2))
+
+        pts1_arr = np.array(pts1)
+        pts2_arr = np.array(pts2)
+
+        # Triangulate from noisy 2D
+        result_3d = triangulate_points(synthetic_calib, pts1_arr, pts2_arr)
+
+        error = compute_reprojection_error(
+            synthetic_calib, result_3d, pts1_arr, pts2_arr
+        )
+
+        # With 1px noise, reprojection error should be bounded
+        assert error < 5.0, f"Reprojection error too large: {error:.2f}px"

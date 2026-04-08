@@ -125,3 +125,57 @@ class TestDefaultAddresses:
 
     def test_chest_mapped(self, receiver):
         assert "Chest" in receiver.bone_addresses.values()
+
+
+class TestQuaternionNormalization:
+    def test_quaternion_normalized(self, receiver):
+        """Non-unit quaternion (2,0,0,0) should be normalized to (1,0,0,0)."""
+        receiver._handle_rotation(
+            "/tracking/trackers/1/rotation", "Hips",
+            2.0, 0.0, 0.0, 0.0,
+        )
+        bone = receiver.bones["Hips"]
+        assert bone.timestamp > 0
+        quat = bone.rotation.as_quat()  # [x, y, z, w]
+        assert abs(quat[0]) == pytest.approx(1.0, abs=1e-6)
+        assert quat[1] == pytest.approx(0.0, abs=1e-6)
+        assert quat[2] == pytest.approx(0.0, abs=1e-6)
+        assert quat[3] == pytest.approx(0.0, abs=1e-6)
+
+    def test_zero_quaternion_rejected(self, receiver):
+        """Zero quaternion (0,0,0,0) should be rejected (norm < 1e-6)."""
+        receiver._handle_rotation(
+            "/tracking/trackers/1/rotation", "Hips",
+            0.0, 0.0, 0.0, 0.0,
+        )
+        assert receiver.bones["Hips"].timestamp == 0.0
+
+    def test_near_unit_quaternion_accepted(self, receiver):
+        """Nearly-unit quaternion should be accepted and normalized."""
+        receiver._handle_rotation(
+            "/tracking/trackers/1/rotation", "Hips",
+            0.999, 0.01, 0.01, 0.01,
+        )
+        bone = receiver.bones["Hips"]
+        assert bone.timestamp > 0
+        quat = bone.rotation.as_quat()
+        norm = sum(q * q for q in quat) ** 0.5
+        assert norm == pytest.approx(1.0, abs=1e-6)
+
+
+class TestHandleUnknown:
+    def test_handle_unknown_does_not_crash(self, receiver):
+        """_handle_unknown should not raise any exception."""
+        receiver._handle_unknown("/some/unknown/address", 1, 2, 3)
+        receiver._handle_unknown("/another/addr")
+
+
+class TestCustomBoneAddresses:
+    def test_custom_bone_addresses(self):
+        """Receiver initialized with custom addresses uses them."""
+        custom = {"/custom/1": "MyBone", "/custom/2": "OtherBone"}
+        r = OSCReceiver(host="127.0.0.1", port=19876, bone_addresses=custom)
+        assert r.bone_addresses == custom
+        assert "MyBone" in r.bones
+        assert "OtherBone" in r.bones
+        assert len(r.bones) == 2

@@ -1,6 +1,7 @@
 """Tests for OSC sender using mock UDP client."""
 
-from unittest.mock import MagicMock
+import time
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -106,3 +107,70 @@ class TestTrackerMapping:
 
     def test_max_8_trackers(self, sender):
         assert len(sender.JOINT_TO_TRACKER_ID) <= 8
+
+
+class TestSendEdgeCases:
+    def test_send_empty_list(self, sender, mock_client):
+        """Sending an empty list should succeed without calling client."""
+        result = sender.send([])
+        assert result is True
+        assert mock_client.send_message.call_count == 0
+
+
+class TestConnectCreatesClient:
+    def test_connect_creates_simple_udp_client(self, sender):
+        """connect() should create a _client instance."""
+        assert sender._client is None
+        sender.connect()
+        assert sender._client is not None
+        assert sender._connected is True
+
+
+class TestDoubleClose:
+    def test_double_close_is_safe(self, sender):
+        """Calling close() twice should not raise."""
+        sender.connect()
+        sender.close()
+        assert sender._client is None
+        sender.close()  # Second close — must not crash
+        assert sender._client is None
+        assert not sender._connected
+
+
+class TestRetryLogic:
+    def test_send_disconnected_within_retry_interval_returns_false(self, sender):
+        """If disconnected and within retry interval, send returns False."""
+        sender._connected = False
+        sender._last_retry = time.monotonic()  # Just retried
+        result = sender.send([])
+        assert result is False
+
+    def test_send_disconnected_retries_after_interval(self, sender):
+        """After retry interval, send attempts reconnect."""
+        sender._connected = False
+        sender._last_retry = 0  # Long ago
+        result = sender.send([])
+        assert result is True
+        assert sender._connected
+
+    def test_send_with_none_client_returns_false(self, sender):
+        """If client is None after connect, send returns False."""
+        sender._connected = True
+        sender._client = None
+        result = sender.send([
+            TrackerOutput(
+                position=np.zeros(3),
+                rotation=Rotation.identity(),
+                joint_name="Hips",
+            ),
+        ])
+        assert result is False
+
+
+class TestConnectFailure:
+    def test_connect_oserror_returns_false(self, sender):
+        """If SimpleUDPClient raises OSError, connect returns False."""
+        with patch("osc_tracking.osc_sender.SimpleUDPClient", side_effect=OSError("fail")):
+            result = sender.connect()
+            assert result is False
+            assert not sender._connected

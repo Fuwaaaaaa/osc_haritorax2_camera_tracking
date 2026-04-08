@@ -163,3 +163,82 @@ class TestDtClamping:
         mode = engine.update()
         assert isinstance(mode, TrackingMode)
         # The filter should not explode from a huge dt
+
+
+class TestVisualCompassOcclusion:
+    def test_visual_compass_not_applied_in_occlusion(self, engine, mock_camera, mock_receiver):
+        """Visual compass should NOT be applied in FULL_OCCLUSION mode."""
+        mock_camera.read_joints.return_value = None
+        engine.state_machine.config.hysteresis_sec = 0.0
+        engine.state_machine._last_osc_time = time.monotonic()
+
+        with patch(
+            "osc_tracking.fusion_engine.correct_heading"
+        ) as mock_correct:
+            mode = engine.update()
+            assert mode == TrackingMode.FULL_OCCLUSION
+            mock_correct.assert_not_called()
+
+    def test_visual_compass_skipped_without_elbow_data(
+        self, engine, mock_camera, mock_receiver
+    ):
+        """Visual compass should be skipped when elbow joints are missing."""
+        # Provide camera data but WITHOUT LeftElbow and RightElbow
+        joints_no_elbows = {
+            name: (np.array([0.0, 1.0, 2.0]), 0.9)
+            for name in JOINT_NAMES
+            if name not in ("LeftElbow", "RightElbow")
+        }
+        mock_camera.read_joints.return_value = joints_no_elbows
+        mock_receiver.get_bone_rotation.return_value = Rotation.from_euler(
+            "xyz", [0, 30, 0], degrees=True
+        )
+
+        with patch(
+            "osc_tracking.fusion_engine.correct_heading"
+        ) as mock_correct:
+            engine.update()
+            mock_correct.assert_not_called()
+
+
+class TestConvergence:
+    def test_multiple_updates_converge(self, engine, mock_camera, mock_sender):
+        """After 30 frames, the fused position should converge toward camera target."""
+        target = np.array([1.0, 2.0, 3.0])
+        mock_camera.read_joints.return_value = {
+            name: (target.copy(), 0.95) for name in JOINT_NAMES
+        }
+
+        for _ in range(30):
+            engine.update()
+            time.sleep(0.001)
+
+        outputs = mock_sender.send.call_args[0][0]
+        hips = next(o for o in outputs if o.joint_name == "Hips")
+        dist = np.linalg.norm(hips.position - target)
+        assert dist < 0.5, f"Position did not converge: distance={dist:.3f}"
+
+
+class TestPartialCameraData:
+    def test_partial_camera_data(self, engine, mock_camera, mock_sender):
+        """Engine handles partial camera data (only some joints present)."""
+        partial_joints = {
+            "Hips": (np.array([0.0, 1.0, 2.0]), 0.9),
+            "Chest": (np.array([0.0, 1.5, 2.0]), 0.85),
+        }
+        mock_camera.read_joints.return_value = partial_joints
+
+        mode = engine.update()
+        assert isinstance(mode, TrackingMode)
+
+        outputs = mock_sender.send.call_args[0][0]
+        assert len(outputs) == len(JOINT_NAMES)
+
+        # Joints with camera data should have non-zero position
+        hips = next(o for o in outputs if o.joint_name == "Hips")
+        assert not np.allclose(hips.position, 0.0)
+
+        # Joints without camera data should still have valid output
+        left_foot = next(o for o in outputs if o.joint_name == "LeftFoot")
+        assert left_foot.position is not None
+        assert left_foot.rotation is not None
