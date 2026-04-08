@@ -104,16 +104,18 @@ class TestServerLifecycle:
         receiver.stop()
 
     def test_port_conflict_tries_alternative(self):
-        """If port is taken, receiver tries port+1."""
-        r1 = OSCReceiver(port=19877)
-        r2 = OSCReceiver(port=19877)
-        r1.start()
+        """If port is taken, receiver tries port+1..+3."""
+        import socket
+        # Use a raw socket to block a port without OSC server overhead
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", 19951))
         try:
-            r2.start()
-            assert r2.port == 19878  # Should have incremented
+            r = OSCReceiver(port=19951)
+            r.start()
+            assert r.port in (19952, 19953, 19954)
+            r.stop()
         finally:
-            r1.stop()
-            r2.stop()
+            sock.close()
 
 
 class TestDefaultAddresses:

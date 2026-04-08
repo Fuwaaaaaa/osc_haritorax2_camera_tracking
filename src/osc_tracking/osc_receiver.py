@@ -12,10 +12,13 @@ Architecture:
                          last-received time
 """
 
+import logging
 import math
 import threading
 import time
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
@@ -101,11 +104,22 @@ class OSCReceiver:
             )
         except OSError as e:
             if e.errno == 10048 or "Address already in use" in str(e):
-                # Try alternative port
-                self._server = BlockingOSCUDPServer(
-                    (self.host, self.port + 1), dispatcher
+                original_port = self.port
+                for attempt in range(1, 4):
+                    try:
+                        self.port = original_port + attempt
+                        self._server = BlockingOSCUDPServer(
+                            (self.host, self.port), dispatcher
+                        )
+                        break
+                    except OSError:
+                        if attempt == 3:
+                            raise
+                logger.warning(
+                    "Port %d in use, using %d instead. "
+                    "Make sure SlimeVR Server sends to port %d.",
+                    original_port, self.port, self.port,
                 )
-                self.port += 1
             else:
                 raise
 
