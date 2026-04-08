@@ -37,11 +37,8 @@
 - **Priority:** P2
 - **Context:** Design Reviewで指摘
 
-### 残りモジュール統合（vmc_sender, hotkeys等）
-- **What:** 12個の未統合モジュール（vmc_sender, discord_presence, hotkeys, rest_api, notifications, autostart, body_proportions, bvh_exporter, data_exporter, motion_smoothing, osc_remapper, skeleton_viewer）のmain.py統合
-- **Why:** 実装済みだが呼ばれていない。5モジュールは統合済み（quality_meter, web_dashboard, profiler, gesture_detector, recorder）
-- **Effort:** M（CC: 30分）
-- **Priority:** P2
+### ~~残りモジュール統合（vmc_sender, hotkeys等）~~ ✅ 完了
+- **解決:** 全17モジュールをmain.pyに統合済み。CLIフラグ（--vmc, --viewer, --discord, --api, --remap, --bvh, --smoothing等）で有効化。
 
 ## P3 - Nice to Have
 
