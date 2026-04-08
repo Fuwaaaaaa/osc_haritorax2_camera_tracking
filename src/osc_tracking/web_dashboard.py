@@ -47,6 +47,8 @@ const es=new EventSource('/events');
 es.onmessage=e=>{
   const d=JSON.parse(e.data);
   document.getElementById('mode').textContent=d.mode||'---';
+  const modeLabel=d.mode==='VISIBLE'?'GOOD':d.mode==='FULL_OCCLUSION'||d.mode==='IMU_DISCONNECTED'?'ERROR':'WARNING';
+  document.getElementById('mode').textContent=d.mode+' ('+modeLabel+')';
   document.getElementById('mode').className='value '+(
     d.mode==='VISIBLE'?'green':d.mode==='FULL_OCCLUSION'?'red':'yellow');
   document.getElementById('fps').textContent=Math.round(d.fps||0);
@@ -56,9 +58,10 @@ es.onmessage=e=>{
     jc.innerHTML='';
     for(const[name,j]of Object.entries(d.joints)){
       const c=j.conf>0.7?'#22c55e':j.conf>0.3?'#eab308':'#ef4444';
+      const lbl=j.conf>0.7?'GOOD':j.conf>0.3?'WARN':'LOW';
       jc.innerHTML+=`<div class="joint"><span>${name}</span>
         <div class="bar"><div class="bar-fill" style="width:${j.conf*100}%;background:${c}"></div></div>
-        <span style="width:3em;text-align:right">${(j.conf*100).toFixed(0)}%</span></div>`;
+        <span style="width:5em;text-align:right">${(j.conf*100).toFixed(0)}% ${lbl}</span></div>`;
     }
   }
   const log=document.getElementById('log');

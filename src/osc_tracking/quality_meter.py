@@ -23,6 +23,16 @@ class QualityLevel(Enum):
     ERROR = "red"
     OFFLINE = "gray"
 
+    @property
+    def label(self) -> str:
+        """Colorblind-accessible text label."""
+        return {
+            "green": "GOOD",
+            "yellow": "WARNING",
+            "red": "ERROR",
+            "gray": "OFFLINE",
+        }[self.value]
+
 
 def _create_icon_image(color: str, size: int = 64) -> "Image.Image":
     """Create a solid circle icon."""
@@ -75,7 +85,7 @@ class QualityMeter:
         self._fps = fps
         try:
             self._icon.icon = _create_icon_image(level.value)
-            self._icon.title = f"OSC Tracking — {mode} ({fps:.0f} fps)"
+            self._icon.title = f"OSC Tracking — {level.label}: {mode} ({fps:.0f} fps)"
         except Exception:
             pass
 
