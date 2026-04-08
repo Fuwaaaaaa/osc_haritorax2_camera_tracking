@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "osc-tracking"
+version = "0.1.0"
+description = "HaritoraX2 x Dual WebCam Hybrid Tracking System"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "mediapipe>=0.10.9",
+    "opencv-python>=4.8.0",
+    "python-osc>=1.8.3",
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+]
+
+[project.optional-dependencies]
+voice = ["vosk>=0.3.45"]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[project.scripts]
+osc-tracking = "osc_tracking.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=osc_tracking --cov-report=term-missing"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.setuptools.packages.find]
+where = ["src"]

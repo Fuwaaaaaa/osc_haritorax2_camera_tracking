@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(gh repo:*)",
+      "WebSearch",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python -m pytest tests/ --cov=osc_tracking --cov-report=term-missing --tb=no -q)",
+      "Bash(python -m osc_tracking.tools.download_model --variant heavy)",
+      "Bash(python -m pytest tests/ -v --tb=short -q)",
+      "Bash(python -m osc_tracking.tools.generate_checkerboard)",
+      "Bash(gh run:*)",
+      "Bash(ruff check:*)",
+      "Bash(mypy src/osc_tracking/ --ignore-missing-imports)",
+      "Bash(python -m pytest tests/ -q --tb=line)"
+    ]
+  }
+}

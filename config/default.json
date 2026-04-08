@@ -1,0 +1,23 @@
+{
+  "cam1_index": 0,
+  "cam2_index": 1,
+  "camera_resolution": [640, 480],
+  "target_fps": 30,
+  "osc_receive_host": "127.0.0.1",
+  "osc_receive_port": 6969,
+  "osc_send_host": "127.0.0.1",
+  "osc_send_port": 9000,
+  "calibration_file": "calibration_data/stereo_calib.npz",
+  "model_path": "models/pose_landmarker_heavy.task",
+  "model_path_lite": "models/pose_landmarker_lite.task",
+  "min_detection_confidence": 0.5,
+  "min_tracking_confidence": 0.5,
+  "visible_threshold": 0.7,
+  "partial_threshold": 0.3,
+  "osc_timeout_sec": 1.0,
+  "hysteresis_sec": 0.5,
+  "smooth_rate": 5.0,
+  "drift_velocity_threshold": 0.02,
+  "drift_hold_seconds": 10.0,
+  "compass_blend_factor": 0.3
+}
