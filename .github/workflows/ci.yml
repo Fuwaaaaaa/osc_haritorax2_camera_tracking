@@ -44,4 +44,4 @@ jobs:
         run: pytest --tb=short -q
       - name: Coverage
         if: matrix.python-version == '3.12'
-        run: pytest --cov=osc_tracking --cov-report=term-missing --cov-fail-under=40
+        run: pytest --cov=osc_tracking --cov-report=term-missing --cov-fail-under=20

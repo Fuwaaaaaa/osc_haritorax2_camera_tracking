@@ -84,12 +84,12 @@ class NotificationManager:
         if not SOUND_AVAILABLE:
             return
         freq, duration = SOUNDS.get(level, SOUNDS[NotificationType.INFO])
-        threading.Thread(target=winsound.Beep, args=(freq, duration), daemon=True).start()
+        threading.Thread(target=winsound.Beep, args=(freq, duration), daemon=True).start()  # type: ignore[attr-defined]
 
     def _show_popup(self, message: str, level: str) -> None:
         """Show a Windows toast notification (best-effort)."""
         try:
-            from ctypes import windll
+            from ctypes import windll  # type: ignore[attr-defined]
             windll.user32.MessageBeep(0)  # System notification sound
         except Exception:
             pass
