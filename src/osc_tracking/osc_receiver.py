@@ -147,6 +147,11 @@ class OSCReceiver:
             quat = [x, y, z, w]
             if not all(math.isfinite(v) for v in quat):
                 return
+            # Normalize quaternion to unit length
+            norm = math.sqrt(x * x + y * y + z * z + w * w)
+            if norm < 1e-6:
+                return
+            quat = [x / norm, y / norm, z / norm, w / norm]
             self.bones[bone_name] = BoneData(
                 rotation=Rotation.from_quat(quat),
                 timestamp=time.monotonic(),
