@@ -119,6 +119,33 @@ class TestHysteresis:
         assert sm_with_hysteresis.mode == TrackingMode.FULL_OCCLUSION
 
 
+class TestBothCamerasLost:
+    def test_both_cameras_zero_bypasses_hysteresis(self, sm):
+        """Both cameras at 0.0 should immediately enter FULL_OCCLUSION."""
+        sm.config.hysteresis_sec = 10.0  # Long hysteresis
+        sm.update(0.9, 0.9)  # Start in VISIBLE
+        assert sm.mode == TrackingMode.VISIBLE
+
+        mode = sm.update(0.0, 0.0)
+        assert mode == TrackingMode.FULL_OCCLUSION  # Immediate, no hysteresis
+
+    def test_both_cameras_near_zero_bypasses_hysteresis(self, sm):
+        """Both cameras below 0.05 should bypass hysteresis."""
+        sm.config.hysteresis_sec = 10.0
+        sm.update(0.9, 0.9)
+        mode = sm.update(0.02, 0.03)
+        assert mode == TrackingMode.FULL_OCCLUSION
+
+    def test_single_cam_degraded_to_both_lost(self, sm):
+        """From SINGLE_CAM_DEGRADED, if remaining camera also dies, go to FULL."""
+        sm.config.hysteresis_sec = 0.0
+        sm.update(0.8, 0.1)  # One camera bad → SINGLE_CAM_DEGRADED
+        assert sm.mode == TrackingMode.SINGLE_CAM_DEGRADED
+
+        mode = sm.update(0.0, 0.0)  # Both lost
+        assert mode == TrackingMode.FULL_OCCLUSION
+
+
 class TestSmoothRecovery:
     def test_full_to_visible_recovery(self, sm):
         sm.update(0.0, 0.0)

@@ -111,6 +111,12 @@ class TrackingStateMachine:
         # Weighted average confidence from both cameras
         avg_confidence = (cam1_confidence + cam2_confidence) / 2.0
 
+        # Both cameras lost simultaneously — bypass hysteresis
+        if cam1_confidence < 0.05 and cam2_confidence < 0.05:
+            self.mode = TrackingMode.FULL_OCCLUSION
+            self._pending_mode = None
+            return self.mode
+
         # Check for single camera degradation
         cam_diff = abs(cam1_confidence - cam2_confidence)
         min_cam = min(cam1_confidence, cam2_confidence)
