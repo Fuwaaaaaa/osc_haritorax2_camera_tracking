@@ -10,7 +10,10 @@ from .camera_tracker import CameraConfig, CameraTracker
 from .config import TrackingConfig
 from .fusion_engine import FusionEngine
 from .gesture_detector import GestureDetector
+from .motion_smoothing import get_preset
+from .notifications import NotificationManager
 from .osc_receiver import OSCReceiver
+from .osc_remapper import OSCRemapper
 from .osc_sender import OSCSender
 from .profiler import PerformanceProfiler
 from .quality_meter import QualityLevel, QualityMeter
@@ -47,6 +50,15 @@ def main() -> None:
     parser.add_argument("--dashboard-port", type=int, default=8765, help="Web dashboard port")
     parser.add_argument("--record", action="store_true", help="Record session to JSONL file")
     parser.add_argument("--profile", action="store_true", help="Enable performance profiling")
+    parser.add_argument("--vmc", action="store_true", help="Enable VMC Protocol output")
+    parser.add_argument("--vmc-port", type=int, default=39539, help="VMC Protocol port")
+    parser.add_argument("--viewer", action="store_true", help="Show 3D skeleton viewer")
+    parser.add_argument("--discord", action="store_true", help="Enable Discord Rich Presence")
+    parser.add_argument("--api", action="store_true", help="Enable REST API")
+    parser.add_argument("--api-port", type=int, default=8766, help="REST API port")
+    parser.add_argument("--remap", type=str, help="OSC address remap profile (vrchat/resonite/chilloutvr)")
+    parser.add_argument("--bvh", type=str, help="Export BVH file to path")
+    parser.add_argument("--smoothing", type=str, choices=["default", "anime", "realistic", "dance", "sleep"], help="Motion smoothing preset")
     args = parser.parse_args()
 
     # Load config
@@ -114,6 +126,51 @@ def main() -> None:
         from .recorder import TrackingRecorder
         recorder = TrackingRecorder()
 
+    # VMC Protocol output
+    vmc_sender = None
+    if args.vmc:
+        from .vmc_sender import VMCSender
+        vmc_sender = VMCSender(port=args.vmc_port)
+
+    # 3D skeleton viewer
+    viewer = None
+    if args.viewer:
+        from .skeleton_viewer import SkeletonViewer
+        viewer = SkeletonViewer()
+
+    # Discord Rich Presence
+    discord = None
+    if args.discord:
+        from .discord_presence import DiscordPresence
+        discord = DiscordPresence()
+
+    # REST API
+    api = None
+    if args.api:
+        from .rest_api import RestAPI
+        api = RestAPI(port=args.api_port)
+
+    # OSC address remapper
+    remapper = None
+    if args.remap:
+        remapper = OSCRemapper(profile_name=args.remap)
+
+    # Motion smoothing preset
+    if args.smoothing:
+        preset = get_preset(args.smoothing)
+        engine.filter.SMOOTH_RATE = preset.smooth_rate
+        engine.filter.DRIFT_VELOCITY_THRESHOLD = preset.noise_threshold
+        logger.info("Smoothing preset: %s (rate=%.1f)", preset.name, preset.smooth_rate)
+
+    # Notifications (always on)
+    notifier = NotificationManager()
+
+    # BVH exporter
+    bvh = None
+    if args.bvh:
+        from .bvh_exporter import BVHExporter
+        bvh = BVHExporter(output_path=args.bvh)
+
     def shutdown(sig, frame):
         logger.info("Shutting down...")
         engine.stop()
@@ -124,6 +181,17 @@ def main() -> None:
         if recorder:
             count = recorder.stop()
             print(f"  Recording saved: {count} frames")
+        if bvh:
+            frames = bvh.export(args.bvh)
+            print(f"  BVH exported: {frames} frames to {args.bvh}")
+        if viewer:
+            viewer.stop()
+        if api:
+            api.stop()
+        if vmc_sender:
+            vmc_sender.close()
+        if discord:
+            discord.stop()
         if profiler:
             print(profiler.report())
         sys.exit(0)
@@ -143,8 +211,14 @@ def main() -> None:
         print("  Mode: OSC passthrough (no camera)")
     if dashboard:
         print(f"  Dashboard: http://localhost:{args.dashboard_port}")
+    if vmc_sender:
+        print(f"  VMC output: port {args.vmc_port}")
+    if args.remap:
+        print(f"  OSC remap: {args.remap}")
     if args.record:
         print("  Recording: enabled")
+    if args.bvh:
+        print(f"  BVH export: {args.bvh}")
     if args.profile:
         print("  Profiling: enabled")
     print("=" * 50)
@@ -158,6 +232,14 @@ def main() -> None:
         dashboard.start()
     if recorder:
         recorder.start()
+    if vmc_sender:
+        vmc_sender.connect()
+    if viewer:
+        viewer.start()
+    if discord:
+        discord.start()
+    if api:
+        api.start()
 
     if not args.no_camera:
         engine.start()
@@ -233,6 +315,59 @@ def main() -> None:
                         rec_data[name] = (pos, rot, conf)
                     recorder.record_frame(rec_data, mode.name)
 
+            # VMC Protocol output
+            if vmc_sender and not args.no_camera:
+                cj = camera.read_joints()
+                if cj:
+                    vmc_data = {}
+                    for name, (pos, conf) in cj.items():
+                        rot = receiver.get_bone_rotation(name)
+                        if rot is None:
+                            from scipy.spatial.transform import Rotation
+                            rot = Rotation.identity()
+                        vmc_data[name] = (pos, rot)
+                    vmc_sender.send_frame(vmc_data)
+
+            # BVH recording
+            if bvh and not args.no_camera:
+                cj = camera.read_joints()
+                if cj:
+                    bvh_data = {}
+                    for name, (pos, conf) in cj.items():
+                        rot = receiver.get_bone_rotation(name)
+                        if rot is None:
+                            from scipy.spatial.transform import Rotation
+                            rot = Rotation.identity()
+                        bvh_data[name] = (pos, rot)
+                    bvh.add_frame(bvh_data)
+
+            # Skeleton viewer
+            if viewer and not args.no_camera:
+                cj = camera.read_joints()
+                if cj:
+                    viewer.update({name: pos for name, (pos, _) in cj.items()})
+
+            # Discord presence
+            if discord:
+                fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
+                discord.update(mode.name, fps_now)
+
+            # REST API state
+            if api:
+                fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
+                joint_data = {}
+                if not args.no_camera:
+                    cj = camera.read_joints()
+                    if cj:
+                        joint_data = {name: {"conf": c} for name, (_, c) in cj.items()}
+                api.update(mode.name, fps_now, joint_data)
+
+            # Notifications
+            if mode == TrackingMode.IMU_DISCONNECTED:
+                notifier.notify_disconnect()
+            elif mode == TrackingMode.FULL_OCCLUSION:
+                notifier.notify_camera_lost(0)
+
             if profiler:
                 profiler.end_frame()
 
@@ -270,6 +405,17 @@ def main() -> None:
             dashboard.stop()
         if recorder:
             recorder.stop()
+        if bvh:
+            frames = bvh.export(args.bvh)
+            print(f"  BVH exported: {frames} frames")
+        if viewer:
+            viewer.stop()
+        if api:
+            api.stop()
+        if vmc_sender:
+            vmc_sender.close()
+        if discord:
+            discord.stop()
         if profiler:
             print(profiler.report())
 
