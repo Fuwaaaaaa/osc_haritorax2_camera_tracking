@@ -61,7 +61,8 @@ class ComplementaryFilter:
     DRIFT_HOLD_SECONDS = 10.0
     DRIFT_NOISE_SCALE = 0.01  # 1% of normal when stationary
 
-    def __init__(self):
+    def __init__(self, compass_blend_factor: float):
+        self.compass_blend_factor = max(0.0, min(1.0, compass_blend_factor))
         self.joints: dict[str, JointState] = {
             name: JointState() for name in JOINT_NAMES
         }
@@ -128,7 +129,7 @@ class ComplementaryFilter:
             if camera_position is not None and confidence > 0.7:
                 # Visible mode: blend current rotation toward IMU using Slerp
                 alpha = self._smooth_alpha(dt)
-                blend = alpha * 0.3
+                blend = alpha * self.compass_blend_factor
                 from scipy.spatial.transform import Slerp as ScipySlerp
                 key_rots = Rotation.concatenate([state.rotation, imu_rotation])
                 slerp = ScipySlerp([0.0, 1.0], key_rots)

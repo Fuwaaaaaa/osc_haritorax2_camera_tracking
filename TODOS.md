@@ -8,6 +8,15 @@
 ### ~~MediaPipe API移行確認~~ ✅ 完了
 - **解決:** コードは既にMediaPipe Pose Landmarker Tasks APIを使用。CLAUDE.mdにも記載済み。
 
+### ~~compass_blend_factorバグ修正~~ ✅ 完了
+- **解決:** config→FusionEngine→ComplementaryFilter/VisualCompassに正しくスレッディング。ハードコード0.3を排除。
+
+### ~~FUTON_MODE実装~~ ✅ 完了
+- **解決:** 6モードステートマシンに追加。ピッチ検出、ドウェルタイム、NaN安全、設定可能なトリガージョイント。
+
+### ~~camera_tracker.pyテストカバレッジ~~ ✅ 完了
+- **解決:** 17件のテスト追加。SharedMemory読み書き、失効データ、NaN、ライフサイクル、トーンリード。
+
 ## P2 - Important
 
 ### OBSオーバーレイ（WebSocketインターフェース）

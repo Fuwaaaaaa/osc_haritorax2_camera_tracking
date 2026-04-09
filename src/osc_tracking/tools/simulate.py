@@ -44,7 +44,7 @@ def main():
     )
 
     simulator = MotionSimulator(sim_config)
-    filt = ComplementaryFilter()
+    filt = ComplementaryFilter(compass_blend_factor=0.3)
     sm = TrackingStateMachine(config=ModeConfig(hysteresis_sec=0.3))
     sender = OSCSender() if args.send_osc else None
 

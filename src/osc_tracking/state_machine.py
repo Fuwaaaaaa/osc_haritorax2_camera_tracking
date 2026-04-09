@@ -38,6 +38,7 @@ class TrackingMode(Enum):
     FULL_OCCLUSION = auto()
     IMU_DISCONNECTED = auto()
     SINGLE_CAM_DEGRADED = auto()
+    FUTON_MODE = auto()
 
 
 @dataclass
@@ -48,6 +49,10 @@ class ModeConfig:
     osc_timeout_sec: float = 1.0
     hysteresis_sec: float = 0.5
     resync_duration_sec: float = 1.0
+    futon_pitch_threshold: float = 60.0
+    futon_exit_threshold: float = 30.0
+    futon_dwell_time_sec: float = 0.5
+    futon_trigger_joint: str = "Chest"
 
 
 class TrackingStateMachine:
@@ -64,6 +69,8 @@ class TrackingStateMachine:
         self._pending_since: float = 0.0
         self._last_osc_time: float = time.monotonic()
         self._resync_start: float | None = None
+        self._futon_active: bool = False
+        self._futon_pending_since: float | None = None
 
     @property
     def is_resyncing(self) -> bool:
@@ -75,6 +82,30 @@ class TrackingStateMachine:
             self._resync_start = None
             return False
         return True
+
+    def on_imu_pitch(self, pitch_degrees: float) -> None:
+        """Update futon mode based on chest IMU pitch angle.
+
+        Args:
+            pitch_degrees: Pitch angle in degrees. Uses YXZ euler convention.
+        """
+        import math
+        if not math.isfinite(pitch_degrees):
+            return
+
+        abs_pitch = abs(pitch_degrees)
+        if abs_pitch >= self.config.futon_pitch_threshold:
+            if not self._futon_active:
+                if self._futon_pending_since is None:
+                    self._futon_pending_since = time.monotonic()
+                elapsed = time.monotonic() - self._futon_pending_since
+                if elapsed >= self.config.futon_dwell_time_sec:
+                    self._futon_active = True
+                    self._futon_pending_since = None
+        elif abs_pitch < self.config.futon_exit_threshold:
+            self._futon_active = False
+            self._futon_pending_since = None
+        # In deadband (exit_threshold <= pitch < pitch_threshold): no change
 
     def on_osc_received(self) -> None:
         """Call when an OSC message is received from HaritoraX2."""
@@ -106,6 +137,12 @@ class TrackingStateMachine:
         osc_elapsed = now - self._last_osc_time
         if osc_elapsed > self.config.osc_timeout_sec:
             self._apply_mode(TrackingMode.IMU_DISCONNECTED, now)
+            return self.mode
+
+        # Check FUTON_MODE (second priority — user lying down)
+        if self._futon_active:
+            self.mode = TrackingMode.FUTON_MODE
+            self._pending_mode = None
             return self.mode
 
         # Weighted average confidence from both cameras

@@ -36,6 +36,7 @@ import numpy as np
 
 from .camera_tracker import CameraTracker
 from .complementary_filter import JOINT_NAMES, ComplementaryFilter
+from .config import TrackingConfig
 from .osc_receiver import OSCReceiver
 from .osc_sender import OSCSender, TrackerOutput
 from .state_machine import TrackingMode, TrackingStateMachine
@@ -52,12 +53,16 @@ class FusionEngine:
         camera: CameraTracker,
         receiver: OSCReceiver,
         sender: OSCSender,
+        config: TrackingConfig | None = None,
     ):
         self.camera = camera
         self.receiver = receiver
         self.sender = sender
+        self.config = config or TrackingConfig()
         self.state_machine = TrackingStateMachine()
-        self.filter = ComplementaryFilter()
+        self.filter = ComplementaryFilter(
+            compass_blend_factor=self.config.compass_blend_factor,
+        )
         self._last_update: float = time.monotonic()
         self._running = False
 
@@ -89,15 +94,25 @@ class FusionEngine:
         if self.receiver.is_connected:
             self.state_machine.on_osc_received()
 
+        # Extract pitch from chest IMU for FUTON_MODE detection
+        trigger_joint = self.config.futon_trigger_joint \
+            if hasattr(self.config, "futon_trigger_joint") else "Chest"
+        chest_rot = self.receiver.get_bone_rotation(trigger_joint)
+        if chest_rot is not None:
+            euler = chest_rot.as_euler("YXZ")  # yaw, pitch, roll
+            pitch_deg = np.degrees(euler[1])
+            self.state_machine.on_imu_pitch(pitch_deg)
+
         # Update state machine
         mode = self.state_machine.update(cam1_conf, cam2_conf, now)
 
         # Fuse each joint
         outputs: list[TrackerOutput] = []
+        is_futon = mode == TrackingMode.FUTON_MODE
         for joint_name in JOINT_NAMES:
             camera_pos = None
             confidence = 0.0
-            if camera_joints and joint_name in camera_joints:
+            if not is_futon and camera_joints and joint_name in camera_joints:
                 camera_pos, confidence = camera_joints[joint_name]
 
             imu_rotation = self.receiver.get_bone_rotation(joint_name)
@@ -119,7 +134,11 @@ class FusionEngine:
                 if left_proxy is not None and right_proxy is not None:
                     camera_yaw = compute_shoulder_yaw(left_proxy[0], right_proxy[0])
                     if camera_yaw is not None:
-                        imu_rotation = correct_heading(imu_rotation, camera_yaw)
+                        imu_rotation = correct_heading(
+                            imu_rotation,
+                            camera_yaw,
+                            blend_factor=self.config.compass_blend_factor,
+                        )
 
             try:
                 state = self.filter.update(
