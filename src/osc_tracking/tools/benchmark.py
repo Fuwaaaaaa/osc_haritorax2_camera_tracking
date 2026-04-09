@@ -83,55 +83,70 @@ class LatencyCollector:
 
 
 def _run_benchmark(cam1_id: int, cam2_id: int, duration_sec: int) -> None:
-    """Run the benchmark loop (requires cameras)."""
+    """Run the benchmark loop (requires cameras).
+
+    Uses MediaPipe Pose Landmarker Tasks API (NOT legacy BlazePose).
+    """
     try:
         import cv2
         import mediapipe as mp
+        from mediapipe.tasks.python import BaseOptions
+        from mediapipe.tasks.python.vision import (
+            PoseLandmarker,
+            PoseLandmarkerOptions,
+            RunningMode,
+        )
     except ImportError as exc:
         logger.error("Missing dependency: %s", exc)
         sys.exit(1)
 
-    from osc_tracking.camera_tracker import CameraConfig
+    from osc_tracking.camera_tracker import CameraConfig, MODEL_PATH_DEFAULT
 
-    mp_pose = mp.solutions.pose
-
-    configs = [
-        CameraConfig(camera_id=cam1_id),
-        CameraConfig(camera_id=cam2_id),
-    ]
+    from pathlib import Path
+    model_path = MODEL_PATH_DEFAULT
+    if not Path(model_path).exists():
+        logger.error(
+            "Model not found at %s. Run: python -m osc_tracking.tools.download_model",
+            model_path,
+        )
+        sys.exit(1)
 
     caps = []
-    for cfg in configs:
-        cap = cv2.VideoCapture(cfg.camera_id)
+    for cam_id in (cam1_id, cam2_id):
+        cap = cv2.VideoCapture(cam_id)
         if not cap.isOpened():
-            logger.error("Cannot open camera %d", cfg.camera_id)
+            logger.error("Cannot open camera %d", cam_id)
             sys.exit(1)
         caps.append(cap)
 
     collector = LatencyCollector()
-    poses = [
-        mp_pose.Pose(
-            model_complexity=1,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
+    landmarkers = []
+    for _ in range(2):
+        options = PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=model_path),
+            running_mode=RunningMode.VIDEO,
+            num_poses=1,
         )
-        for _ in configs
-    ]
+        landmarkers.append(PoseLandmarker.create_from_options(options))
 
     print(f"Running benchmark for {duration_sec}s on cameras {cam1_id}, {cam2_id}...")
+    print(f"Model: {model_path} (Pose Landmarker Tasks API)")
     start = time.monotonic()
+    frame_ts = 0
 
     try:
         while time.monotonic() - start < duration_sec:
             frame_start = time.perf_counter()
 
-            for cap, pose in zip(caps, poses):
+            for cap, landmarker in zip(caps, landmarkers):
                 ret, frame = cap.read()
                 if not ret:
                     continue
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                pose.process(rgb)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                landmarker.detect_for_video(mp_image, frame_ts)
 
+            frame_ts += 33  # ~30fps in milliseconds
             elapsed_ms = (time.perf_counter() - frame_start) * 1000
             collector.record(elapsed_ms)
     except KeyboardInterrupt:
@@ -139,8 +154,8 @@ def _run_benchmark(cam1_id: int, cam2_id: int, duration_sec: int) -> None:
     finally:
         for cap in caps:
             cap.release()
-        for pose in poses:
-            pose.close()
+        for lm in landmarkers:
+            lm.close()
 
     print()
     print(collector.report())

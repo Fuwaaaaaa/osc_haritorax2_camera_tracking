@@ -39,7 +39,7 @@ from .complementary_filter import JOINT_NAMES, ComplementaryFilter
 from .config import TrackingConfig
 from .osc_receiver import OSCReceiver
 from .osc_sender import OSCSender, TrackerOutput
-from .state_machine import TrackingMode, TrackingStateMachine
+from .state_machine import ModeConfig, TrackingMode, TrackingStateMachine
 from .visual_compass import compute_shoulder_yaw, correct_heading
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,16 @@ class FusionEngine:
         self.receiver = receiver
         self.sender = sender
         self.config = config or TrackingConfig()
-        self.state_machine = TrackingStateMachine()
+        self.state_machine = TrackingStateMachine(config=ModeConfig(
+            visible_threshold=self.config.visible_threshold,
+            partial_threshold=self.config.partial_threshold,
+            osc_timeout_sec=self.config.osc_timeout_sec,
+            hysteresis_sec=self.config.hysteresis_sec,
+            futon_pitch_threshold=self.config.futon_pitch_threshold,
+            futon_exit_threshold=self.config.futon_exit_threshold,
+            futon_dwell_time_sec=self.config.futon_dwell_time_sec,
+            futon_trigger_joint=self.config.futon_trigger_joint,
+        ))
         self.filter = ComplementaryFilter(
             compass_blend_factor=self.config.compass_blend_factor,
         )
@@ -95,9 +104,7 @@ class FusionEngine:
             self.state_machine.on_osc_received()
 
         # Extract pitch from chest IMU for FUTON_MODE detection
-        trigger_joint = self.config.futon_trigger_joint \
-            if hasattr(self.config, "futon_trigger_joint") else "Chest"
-        chest_rot = self.receiver.get_bone_rotation(trigger_joint)
+        chest_rot = self.receiver.get_bone_rotation(self.config.futon_trigger_joint)
         if chest_rot is not None:
             euler = chest_rot.as_euler("YXZ")  # yaw, pitch, roll
             pitch_deg = np.degrees(euler[1])

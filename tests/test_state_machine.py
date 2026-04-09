@@ -219,26 +219,29 @@ class TestFutonMode:
         mode = sm_futon.update(0.9, 0.9)
         assert mode != TrackingMode.FUTON_MODE
 
-    def test_dwell_time_prevents_flapping(self):
+    def test_dwell_time_prevents_flapping(self, monkeypatch):
         """Mode should not transition until dwell time has elapsed."""
         config = ModeConfig(
             hysteresis_sec=0.0,
             futon_pitch_threshold=60.0,
             futon_exit_threshold=30.0,
-            futon_dwell_time_sec=0.3,
+            futon_dwell_time_sec=0.5,
         )
         sm = TrackingStateMachine(config=config)
-        sm._last_osc_time = time.monotonic()
+
+        fake_time = [100.0]
+        monkeypatch.setattr(time, "monotonic", lambda: fake_time[0])
+        sm._last_osc_time = fake_time[0]
 
         sm.on_imu_pitch(70.0)
-        mode = sm.update(0.9, 0.9)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
         # Should NOT yet be in FUTON_MODE (dwell not elapsed)
         assert mode != TrackingMode.FUTON_MODE
 
-        # Wait for dwell time to elapse
-        time.sleep(0.35)
+        # Advance past dwell time
+        fake_time[0] = 100.6
         sm.on_imu_pitch(70.0)
-        mode = sm.update(0.9, 0.9)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
         assert mode == TrackingMode.FUTON_MODE
 
     def test_futon_mode_with_no_cameras(self, sm_futon):

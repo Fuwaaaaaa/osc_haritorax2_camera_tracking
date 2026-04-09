@@ -93,12 +93,13 @@ class TrackingStateMachine:
         if not math.isfinite(pitch_degrees):
             return
 
+        now = time.monotonic()
         abs_pitch = abs(pitch_degrees)
         if abs_pitch >= self.config.futon_pitch_threshold:
             if not self._futon_active:
                 if self._futon_pending_since is None:
-                    self._futon_pending_since = time.monotonic()
-                elapsed = time.monotonic() - self._futon_pending_since
+                    self._futon_pending_since = now
+                elapsed = now - self._futon_pending_since
                 if elapsed >= self.config.futon_dwell_time_sec:
                     self._futon_active = True
                     self._futon_pending_since = None
