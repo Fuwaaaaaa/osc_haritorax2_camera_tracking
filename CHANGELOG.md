@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.1 (2026-04-09) — P2 Quality Improvements
+
+### Added
+- **OBSオーバーレイ**: 配信者向けBrowser Sourceオーバーレイ (`--obs` フラグ)。モード、FPS、信頼度をリアルタイム表示
+- **セットアップウィザード**: 初回ユーザー向け7ステップガイド。カメラ検出・モデルDL自動化
+
+### Changed
+- **トラッカー非依存化**: HaritoraX2専用からOSC対応IMUトラッカー全般に対応。README/osc_receiver.pyをリブランド
+- **統一品質閾値**: ComplementaryFilterとWebDashboardがconfigから閾値を受け取るように変更。ハードコード0.7/0.3を排除
+
 ## v0.1.0 (2026-04-08) — Initial Release
 
 HaritoraX2 + デュアルWebカメラのセンサーフュージョンによるVRフルボディトラッキングシステム初版。
