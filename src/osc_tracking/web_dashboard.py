@@ -84,8 +84,10 @@ const es=new EventSource('/events');
 es.onmessage=e=>{
   const d=JSON.parse(e.data);
   const ml=d.mode==='VISIBLE'?'GOOD':
-    d.mode==='FULL_OCCLUSION'||d.mode==='IMU_DISCONNECTED'?'ERROR':'WARNING';
-  const mc=d.mode==='VISIBLE'?'green':d.mode==='FULL_OCCLUSION'?'red':'yellow';
+    d.mode==='FULL_OCCLUSION'||d.mode==='IMU_DISCONNECTED'?'ERROR':
+    d.mode==='FUTON_MODE'?'INFO':'WARNING';
+  const mc=d.mode==='VISIBLE'?'green':d.mode==='FULL_OCCLUSION'?'red':
+    d.mode==='FUTON_MODE'?'cyan':'yellow';
   document.getElementById('mode').textContent=d.mode+' ('+ml+')';
   document.getElementById('mode').className='card-value '+mc;
   document.getElementById('fps').textContent=Math.round(d.fps||0);

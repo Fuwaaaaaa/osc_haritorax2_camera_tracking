@@ -35,6 +35,7 @@ MODE_COLORS = {
     TrackingMode.FULL_OCCLUSION: "\033[91m",     # red
     TrackingMode.IMU_DISCONNECTED: "\033[91m",   # red
     TrackingMode.SINGLE_CAM_DEGRADED: "\033[93m", # yellow
+    TrackingMode.FUTON_MODE: "\033[96m",          # cyan
 }
 RESET = "\033[0m"
 

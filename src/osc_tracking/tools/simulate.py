@@ -20,6 +20,7 @@ MODE_COLORS = {
     TrackingMode.FULL_OCCLUSION: "\033[91m",
     TrackingMode.IMU_DISCONNECTED: "\033[91m",
     TrackingMode.SINGLE_CAM_DEGRADED: "\033[93m",
+    TrackingMode.FUTON_MODE: "\033[96m",
 }
 RESET = "\033[0m"
 
