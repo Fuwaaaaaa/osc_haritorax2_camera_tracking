@@ -31,6 +31,7 @@ python -m osc_tracking.tools.download_model           # MediaPipeモデルDL
 python -m osc_tracking.tools.generate_checkerboard    # チェッカーボード生成
 python -m osc_tracking.tools.connection_check         # SlimeVR OSC接続確認
 python -m osc_tracking.tools.simulate                 # シミュレーションモード
+python -m osc_tracking.tools.setup_wizard             # セットアップウィザード
 ```
 
 ## Key Files
