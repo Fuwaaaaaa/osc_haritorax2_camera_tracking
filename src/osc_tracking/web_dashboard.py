@@ -80,6 +80,8 @@ h2{font-family:var(--font-mono);font-weight:500;font-size:0.7rem;text-transform:
 <h2>Log</h2>
 <div id="log"></div>
 <script>
+const VIS_TH={visible_threshold};
+const PAR_TH={partial_threshold};
 const es=new EventSource('/events');
 es.onmessage=e=>{
   const d=JSON.parse(e.data);
@@ -91,7 +93,7 @@ es.onmessage=e=>{
   document.getElementById('fps').textContent=Math.round(d.fps||0);
   const confEl=document.getElementById('conf');
   confEl.innerHTML=Math.round((d.avg_conf||0)*100)+'<span class="card-unit">%</span>';
-  confEl.className='card-value '+(d.avg_conf>0.7?'green':d.avg_conf>0.3?'yellow':'red');
+  confEl.className='card-value '+(d.avg_conf>VIS_TH?'green':d.avg_conf>PAR_TH?'yellow':'red');
   const st=document.getElementById('status');
   st.textContent=ml;
   st.style.color=mc==='green'?'var(--green)':mc==='red'?'var(--red)':'var(--yellow)';
@@ -101,9 +103,9 @@ es.onmessage=e=>{
   if(d.joints){
     jc.innerHTML='';
     for(const[name,j]of Object.entries(d.joints)){
-      const c=j.conf>0.7?'var(--green)':j.conf>0.3?'var(--yellow)':'var(--red)';
-      const cc=j.conf>0.7?'green':j.conf>0.3?'yellow':'red';
-      const lbl=j.conf>0.7?'GOOD':j.conf>0.3?'WARN':'LOW';
+      const c=j.conf>VIS_TH?'var(--green)':j.conf>PAR_TH?'var(--yellow)':'var(--red)';
+      const cc=j.conf>VIS_TH?'green':j.conf>PAR_TH?'yellow':'red';
+      const lbl=j.conf>VIS_TH?'GOOD':j.conf>PAR_TH?'WARN':'LOW';
       jc.innerHTML+=`<div class="joint"><span class="joint-name">${name}</span>`+
         `<div class="bar"><div class="bar-fill" style="width:${j.conf*100}%;background:${c}"></div></div>`+
         `<span class="joint-conf ${cc}">${(j.conf*100).toFixed(0)}% ${lbl}</span></div>`;
@@ -151,13 +153,41 @@ class DashboardHandler(BaseHTTPRequestHandler):
 class WebDashboard:
     """Lightweight web dashboard for tracking monitoring."""
 
-    def __init__(self, port: int = 8765):
+    def __init__(
+        self,
+        port: int = 8765,
+        visible_threshold: float = 0.7,
+        partial_threshold: float = 0.3,
+    ):
         self.port = port
+        self.visible_threshold = visible_threshold
+        self.partial_threshold = partial_threshold
         self._server: HTTPServer | None = None
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        self._server = HTTPServer(("127.0.0.1", self.port), DashboardHandler)
+        vis_th = self.visible_threshold
+        par_th = self.partial_threshold
+
+        class ConfiguredHandler(DashboardHandler):
+            _visible_threshold = vis_th
+            _partial_threshold = par_th
+
+            def do_GET(self):
+                if self.path == "/":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html")
+                    self.end_headers()
+                    html = DASHBOARD_HTML.replace(
+                        "{visible_threshold}", str(self._visible_threshold)
+                    ).replace(
+                        "{partial_threshold}", str(self._partial_threshold)
+                    )
+                    self.wfile.write(html.encode())
+                else:
+                    super().do_GET()
+
+        self._server = HTTPServer(("127.0.0.1", self.port), ConfiguredHandler)
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True, name="web-dashboard")
         self._thread.start()
         logger.info("Dashboard running at http://localhost:%d", self.port)
