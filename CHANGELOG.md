@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.2.0 (2026-04-09) — Auto Drift Correction
+
+### Added
+- **FUTON_MODE**: 寝転がり検出 (ピッチ角 >60度で自動検出、カメラ補正を停止しIMU回転のみに切替)。500msドウェルタイム、NaN/inf安全、トリガージョイント設定可能
+- **ベンチマークツール**: `python -m osc_tracking.tools.benchmark` — MediaPipe Pose Landmarker Tasks APIのp50/p95/p99レイテンシ計測。30fps達成可否のアーキテクチャ判定
+- **camera_tracker.py テスト**: SharedMemory読み書き、失効データフィルタ、NaNハンドリング、ライフサイクル、トーンリード検出 (17テスト)
+
+### Fixed
+- **compass_blend_factor バグ**: config値がComplementaryFilter/VisualCompassに渡されずハードコード0.3だった問題を修正。configからFusionEngine経由で正しくスレッディング
+- **FUTON_MODE enum未登録**: main.py、simulate.py、web_dashboard.pyのMODE_COLORSにFUTON_MODEを追加 (KeyError防止)
+- **FUTON設定未伝搬**: FusionEngineがデフォルトModeConfigでStateMachineを作成していた問題を修正。config値を正しく伝搬
+
+### Changed
+- ステートマシンを5モードから6モードに拡張
+- ComplementaryFilterのcompass_blend_factorを必須パラメータに変更 ([0,1]クランプ付き)
+
 ## v0.1.0 (2026-04-08) — Initial Release
 
 HaritoraX2 + デュアルWebカメラのセンサーフュージョンによるVRフルボディトラッキングシステム初版。
