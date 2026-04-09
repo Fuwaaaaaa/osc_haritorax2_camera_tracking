@@ -1,15 +1,19 @@
-"""OSC receiver for HaritoraX2 tracker data.
+"""OSC receiver for IMU tracker data.
 
-Receives rotation quaternion data from HaritoraX2 via OSC protocol.
-The actual OSC address patterns and data format should be documented
-in docs/haritora-osc-format.md after Phase 0 investigation.
+Receives rotation quaternion data from any OSC-compatible IMU tracker.
+Designed to be tracker-agnostic: works with HaritoraX2 (via SlimeTora +
+SlimeVR Server), SlimeVR trackers, Tundra Tracker, or any device that
+outputs bone rotations over OSC.
+
+The default OSC address patterns match SlimeVR Server's output format.
+For HaritoraX2-specific protocol details, see docs/haritora-protocol.md.
 
 Architecture:
-    HaritoraX2 ──UDP/OSC──► OSCReceiver ──► FusionEngine
-                              │
-                         Parses quaternion
-                         per bone, tracks
-                         last-received time
+    IMU Tracker ──UDP/OSC──► OSCReceiver ──► FusionEngine
+                               │
+                          Parses quaternion
+                          per bone, tracks
+                          last-received time
 """
 
 import logging

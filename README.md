@@ -1,28 +1,34 @@
-# OSC Tracking — HaritoraX2 x Dual WebCam Hybrid Tracking
+# OSC Tracking — IMU + Dual WebCam Sensor Fusion for VR
 
 [![CI](https://github.com/Fuwaaaaaa/OSC_tracking/actions/workflows/ci.yml/badge.svg)](https://github.com/Fuwaaaaaa/OSC_tracking/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-HaritoraX2（IMU）と2台のWebカメラ（MediaPipe Pose Landmarker）をセンサーフュージョンし、VRフルボディトラッキングの精度と安定性を大幅に向上させるシステム。
+OSC対応IMUトラッカーと2台のWebカメラ（MediaPipe Pose Landmarker）をセンサーフュージョンし、VRフルボディトラッキングの精度と安定性を大幅に向上させるオープンソースミドルウェア。
+
+**対応トラッカー**: HaritoraX2（最初の対応デバイス）。SlimeVR、Tundra Tracker等、OSC出力に対応した任意のIMUトラッカーで動作可能。
 
 ## 特徴
 
-- **布団から出た瞬間にドリフトゼロ復帰**: 布団内ではIMU回転で追従し、カメラ復帰時に蓄積ドリフトを即座に補正。HaritoraX2単体で30分使うとヘディングが数十度ずれるが、このシステムならゼロに戻る
+- **自動ドリフト補正**: カメラがIMUのヘディングドリフトを毎フレーム自動補正。手動リキャリブレーション不要
+- **布団から出た瞬間にドリフトゼロ復帰**: 布団内ではIMU回転で追従し、カメラ復帰時に蓄積ドリフトを即座に補正
 - **磁気ぐねり耐性**: Visual Compassがカメラの肩ラインでIMUヘディングを補正。磁石やPCの近くでも安定
-- **長時間安定**: 相補フィルタ（Slerp回転ブレンド）が毎フレームドリフトを補正
 - **2台カメラ三角測量**: ステレオキャリブレーションで精度の高い3D座標推定。死角を低減
 - **5モードステートマシン**: Visible / Partial Occlusion / Full Occlusion / IMU切断 / 片カメラ劣化を自動判定。両カメラ同時ロスト時はヒステリシスをバイパスして即座にフォールバック
-- **既存ハードウェアのみ**: HaritoraX2 + Webカメラ2台 + PC。追加購入不要
+- **トラッカー非依存**: OSC入力で動作するため、HaritoraX2に限らず任意のIMUトラッカーで利用可能
+- **既存ハードウェアのみ**: IMUトラッカー + Webカメラ2台 + PC。追加購入不要
 
 ## 必要環境
 
 - Python 3.10+
-- HaritoraX2 + [SlimeTora](https://github.com/OCSYT/SlimeTora) + [SlimeVR Server](https://github.com/SlimeVR/SlimeVR-Server)
+- OSC対応IMUトラッカー（下記いずれか）
+  - HaritoraX2 + [SlimeTora](https://github.com/OCSYT/SlimeTora) + [SlimeVR Server](https://github.com/SlimeVR/SlimeVR-Server)
+  - SlimeVR トラッカー + [SlimeVR Server](https://github.com/SlimeVR/SlimeVR-Server)
+  - その他OSC出力対応トラッカー
 - Webカメラ x 2
 - Windows（VRChat推奨）
 
-> **注意**: HaritoraX2はOSCプロトコルを直接使用しません。SlimeTora → SlimeVR Server → OSC出力の経路で接続します。詳細は `docs/haritora-protocol.md` を参照。
+> **注意**: HaritoraX2はOSCプロトコルを直接使用しません。SlimeTora → SlimeVR Server → OSC出力の経路で接続します。詳細は `docs/haritora-protocol.md` を参照。他のトラッカーはSlimeVR ServerのOSC出力を直接使用できます。
 
 ## インストール
 
