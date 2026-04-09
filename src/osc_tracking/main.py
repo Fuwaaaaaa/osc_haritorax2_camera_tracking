@@ -60,6 +60,8 @@ def main() -> None:
     parser.add_argument("--api-port", type=int, default=8766, help="REST API port")
     parser.add_argument("--remap", type=str, help="OSC address remap profile (vrchat/resonite/chilloutvr)")
     parser.add_argument("--bvh", type=str, help="Export BVH file to path")
+    parser.add_argument("--obs", action="store_true", help="Enable OBS overlay (Browser Source)")
+    parser.add_argument("--obs-port", type=int, default=8767, help="OBS overlay port")
     parser.add_argument(
         "--smoothing", type=str,
         choices=["default", "anime", "realistic", "dance", "sleep"],
@@ -156,6 +158,16 @@ def main() -> None:
         from .rest_api import RestAPI
         api = RestAPI(port=args.api_port)
 
+    # OBS overlay
+    obs_overlay = None
+    if args.obs:
+        from .obs_overlay import OBSOverlay
+        obs_overlay = OBSOverlay(
+            port=args.obs_port,
+            visible_threshold=cfg.visible_threshold,
+            partial_threshold=cfg.partial_threshold,
+        )
+
     # OSC address remapper
     if args.remap:
         remapper = OSCRemapper(profile_name=args.remap)
@@ -246,6 +258,8 @@ def main() -> None:
         discord.start()
     if api:
         api.start()
+    if obs_overlay:
+        obs_overlay.start()
 
     if not args.no_camera:
         engine.start()
@@ -335,6 +349,10 @@ def main() -> None:
             if api:
                 joint_data = {name: {"conf": c} for name, (_, c) in cj.items()} if cj else {}
                 api.update(mode.name, fps_now, joint_data)
+
+            # OBS overlay
+            if obs_overlay:
+                obs_overlay.update(mode.name, fps_now, avg_conf)
 
             # Notifications  - only on mode change
             if mode != prev_mode:
