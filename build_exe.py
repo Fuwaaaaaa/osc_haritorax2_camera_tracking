@@ -146,7 +146,7 @@ def main():
 
     # Summary
     print(f"\n{'=' * 50}")
-    print(f"  Build Summary")
+    print("  Build Summary")
     print(f"{'=' * 50}")
     passed = sum(1 for v in results.values() if v)
     total = len(results)
@@ -154,7 +154,7 @@ def main():
         status = "OK" if ok else "FAILED"
         print(f"  [{status}] {name}.exe")
     print(f"\n  {passed}/{total} succeeded")
-    print(f"  Output: dist/")
+    print("  Output: dist/")
     print()
 
     if passed == total:

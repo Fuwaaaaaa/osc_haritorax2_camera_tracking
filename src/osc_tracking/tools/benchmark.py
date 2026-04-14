@@ -100,9 +100,9 @@ def _run_benchmark(cam1_id: int, cam2_id: int, duration_sec: int) -> None:
         logger.error("Missing dependency: %s", exc)
         sys.exit(1)
 
-    from osc_tracking.camera_tracker import CameraConfig, MODEL_PATH_DEFAULT
-
     from pathlib import Path
+
+    from osc_tracking.camera_tracker import MODEL_PATH_DEFAULT
     model_path = MODEL_PATH_DEFAULT
     if not Path(model_path).exists():
         logger.error(

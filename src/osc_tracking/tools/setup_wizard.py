@@ -18,7 +18,6 @@ import logging
 import socket
 import subprocess
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -141,8 +140,8 @@ def check_osc_port_available(port: int) -> bool:
 
 def _print_header() -> None:
     print(f"\n{CYAN}{'=' * 55}")
-    print(f"  OSC Tracking セットアップウィザード")
-    print(f"  HaritoraX2 + デュアルWebカメラ")
+    print("  OSC Tracking セットアップウィザード")
+    print("  HaritoraX2 + デュアルWebカメラ")
     print(f"{'=' * 55}{RESET}\n")
     print("  初回セットアップを7ステップでガイドします。")
     print("  各ステップで必要なものが揃っているか確認します。\n")
@@ -177,7 +176,7 @@ def _run_step_1_model(model_path: str) -> bool:
         return True
 
     print(f"      {YELLOW}モデルが見つかりません: {model_path}{RESET}")
-    print(f"      ダウンロードを実行します...")
+    print("      ダウンロードを実行します...")
     try:
         subprocess.run(
             [sys.executable, "-m", "osc_tracking.tools.download_model"],
@@ -215,20 +214,20 @@ def _run_step_2_cameras(cam1: int, cam2: int) -> bool:
 def _run_step_3_slimevr() -> bool:
     """Step 3: Guide user to set up SlimeTora + SlimeVR."""
     print(f"\n      {BOLD}必要なソフトウェア:{RESET}")
-    print(f"      1. SlimeTora — HaritoraX2をSlimeVRに接続")
-    print(f"         https://github.com/OCSYT/SlimeTora")
-    print(f"      2. SlimeVR Server — OSCでデータを出力")
-    print(f"         https://slimevr.dev/download")
+    print("      1. SlimeTora — HaritoraX2をSlimeVRに接続")
+    print("         https://github.com/OCSYT/SlimeTora")
+    print("      2. SlimeVR Server — OSCでデータを出力")
+    print("         https://slimevr.dev/download")
     print()
     print(f"      {BOLD}手順:{RESET}")
-    print(f"      1. HaritoraX2の電源を入れる")
-    print(f"      2. SlimeToraを起動し、トラッカーが接続されるのを確認")
-    print(f"      3. SlimeVR Serverを起動")
-    print(f"      4. SlimeVR Serverの設定でOSC出力を有効化（ポート6969）")
+    print("      1. HaritoraX2の電源を入れる")
+    print("      2. SlimeToraを起動し、トラッカーが接続されるのを確認")
+    print("      3. SlimeVR Serverを起動")
+    print("      4. SlimeVR Serverの設定でOSC出力を有効化（ポート6969）")
     print()
     _wait_for_enter("  準備ができたらEnterで続行...")
 
-    print(f"      OSC接続を確認中（10秒間）...")
+    print("      OSC接続を確認中（10秒間）...")
     try:
         result = subprocess.run(
             [sys.executable, "-m", "osc_tracking.tools.connection_check",
@@ -245,7 +244,7 @@ def _run_step_3_slimevr() -> bool:
             return True
         else:
             print(f"      {RED}OSCメッセージが受信できません{RESET}")
-            print(f"      SlimeVR ServerのOSC設定を確認してください")
+            print("      SlimeVR ServerのOSC設定を確認してください")
             return False
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         print(f"      {RED}接続チェックがタイムアウトしました{RESET}")
@@ -261,7 +260,7 @@ def _run_step_4_ports(receive_port: int, send_port: int) -> bool:
         print(f"      {GREEN}受信ポート {receive_port}: 利用可能{RESET}")
     else:
         print(f"      {RED}受信ポート {receive_port}: 使用中{RESET}")
-        print(f"      SlimeVR Serverが既に使用している可能性があります（正常）")
+        print("      SlimeVR Serverが既に使用している可能性があります（正常）")
         recv_ok = True  # Expected if SlimeVR is running
 
     if send_ok:
@@ -282,11 +281,11 @@ def _run_step_5_calibration(cam1: int, cam2: int) -> bool:
         return True
 
     print(f"\n      {BOLD}ステレオキャリブレーション手順:{RESET}")
-    print(f"      1. チェッカーボードを印刷（9×6、25mm正方形）")
-    print(f"         生成: python -m osc_tracking.tools.generate_checkerboard")
-    print(f"      2. 両カメラに映る位置でボードを持つ")
-    print(f"      3. SPACEで撮影（10枚以上、角度を変えて）")
-    print(f"      4. 'c'でキャリブレーション実行、'q'で終了")
+    print("      1. チェッカーボードを印刷（9×6、25mm正方形）")
+    print("         生成: python -m osc_tracking.tools.generate_checkerboard")
+    print("      2. 両カメラに映る位置でボードを持つ")
+    print("      3. SPACEで撮影（10枚以上、角度を変えて）")
+    print("      4. 'c'でキャリブレーション実行、'q'で終了")
     print()
     _wait_for_enter("  Enterでキャリブレーションツールを起動...")
 
@@ -304,8 +303,8 @@ def _run_step_5_calibration(cam1: int, cam2: int) -> bool:
 
 def _run_step_6_test(cam1: int, cam2: int) -> bool:
     """Step 6: Test preview with skeleton overlay."""
-    print(f"\n      カメラプレビューを起動します。")
-    print(f"      骨格が表示されれば成功です。'q'で閉じてください。")
+    print("\n      カメラプレビューを起動します。")
+    print("      骨格が表示されれば成功です。'q'で閉じてください。")
     print()
     _wait_for_enter("  Enterでプレビューを起動...")
 
@@ -371,7 +370,7 @@ def run_wizard(cam1: int = 0, cam2: int = 1) -> None:
 
     # Summary
     print(f"\n{CYAN}{'=' * 55}")
-    print(f"  セットアップ完了")
+    print("  セットアップ完了")
     print(f"{'=' * 55}{RESET}\n")
 
     passed = sum(1 for ok in results.values() if ok)
@@ -384,11 +383,11 @@ def run_wizard(cam1: int = 0, cam2: int = 1) -> None:
 
     if passed == total:
         print(f"\n  {GREEN}{BOLD}セットアップ完了！{RESET}")
-        print(f"  起動: python -m osc_tracking.main")
-        print(f"  ダッシュボード: http://localhost:8765\n")
+        print("  起動: python -m osc_tracking.main")
+        print("  ダッシュボード: http://localhost:8765\n")
     else:
         print(f"\n  {YELLOW}一部のステップが未完了です。{RESET}")
-        print(f"  再実行: python -m osc_tracking.tools.setup_wizard\n")
+        print("  再実行: python -m osc_tracking.tools.setup_wizard\n")
 
 
 def main() -> None:
