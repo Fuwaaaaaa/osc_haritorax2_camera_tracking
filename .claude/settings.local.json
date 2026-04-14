@@ -16,7 +16,29 @@
       "Bash(gh run:*)",
       "Bash(ruff check:*)",
       "Bash(mypy src/osc_tracking/ --ignore-missing-imports)",
-      "Bash(python -m pytest tests/ -q --tb=line)"
+      "Bash(python -m pytest tests/ -q --tb=line)",
+      "Bash(git checkout:*)",
+      "Bash(pytest -x -q)",
+      "Bash(pytest tests/test_benchmark.py -x -q)",
+      "Bash(pytest tests/test_complementary_filter.py::TestCompassBlendFactor -x -q)",
+      "Bash(pytest tests/test_complementary_filter.py tests/test_fusion_engine.py -x -q)",
+      "Bash(pytest tests/test_complementary_filter.py::TestCompassBlendFactor::test_blend_factor_zero_means_no_camera_blend -x -q)",
+      "Bash(pytest tests/test_state_machine.py::TestFutonMode -x -q)",
+      "Bash(pytest tests/test_state_machine.py::TestBothCamerasLost -x -q)",
+      "Bash(pytest tests/test_state_machine.py::TestBothCamerasLost::test_both_cameras_return_at_different_times -x -v)",
+      "Bash(python:*)",
+      "Bash(pytest tests/test_camera_tracker.py -x -q)",
+      "Bash(pytest -q)",
+      "Bash(pytest --cov=src/osc_tracking --cov-report=term-missing -q)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Skill(review)",
+      "Bash(git push:*)",
+      "Bash(pytest tests/test_obs_overlay.py -x -q)",
+      "Bash(pytest tests/test_setup_wizard.py -x -q)",
+      "Bash(git fetch:*)",
+      "Bash(gh pr:*)",
+      "Bash(git merge:*)"
     ]
   }
 }

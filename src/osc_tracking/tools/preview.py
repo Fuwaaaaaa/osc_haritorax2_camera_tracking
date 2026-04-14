@@ -157,7 +157,9 @@ def _draw_landmarks(frame, landmarks, connections, w, h):
             cv2.line(frame, points[a], points[b], (255, 255, 255), 2)
 
 
-def _draw_confidence_bar(frame, confidence):
+def _draw_confidence_bar(
+    frame, confidence, visible_threshold=0.7, partial_threshold=0.3,
+):
     """Draw a confidence bar at the bottom of the frame."""
     h, w = frame.shape[:2]
     bar_h = 20
@@ -170,9 +172,9 @@ def _draw_confidence_bar(frame, confidence):
 
     # Fill
     fill_w = int(bar_w * confidence)
-    if confidence > 0.7:
+    if confidence > visible_threshold:
         color = (0, 200, 0)
-    elif confidence > 0.3:
+    elif confidence > partial_threshold:
         color = (0, 165, 255)
     else:
         color = (0, 0, 200)

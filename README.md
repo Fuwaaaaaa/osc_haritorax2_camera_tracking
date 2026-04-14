@@ -41,7 +41,19 @@ python -m osc_tracking.tools.download_model
 
 ## セットアップ
 
-### 1. ステレオキャリブレーション
+### クイックセットアップ（推奨）
+
+初回は7ステップのセットアップウィザードで全体を一括ガイド:
+
+```bash
+python -m osc_tracking.tools.setup_wizard
+```
+
+モデルDL→カメラ確認→SlimeVR接続→ポート確認→キャリブ→テスト→設定保存を順番に実行します。
+
+### 手動セットアップ
+
+#### 1. ステレオキャリブレーション
 
 チェッカーボード（同梱の `checkerboard_9x6_25mm.png` を印刷）を両カメラの視野内で複数角度から撮影:
 
@@ -49,17 +61,17 @@ python -m osc_tracking.tools.download_model
 python -m osc_tracking.tools.calibrate
 ```
 
-### 2. カメラプレビューで確認
+#### 2. カメラプレビューで確認
 
 ```bash
 python -m osc_tracking.tools.preview --cam1 0 --cam2 1
 ```
 
-### 3. SlimeTora + SlimeVR Server を起動
+#### 3. SlimeTora + SlimeVR Server を起動
 
 SlimeVR ServerのOSC出力をポート6969に設定。
 
-### 4. トラッキング開始
+#### 4. トラッキング開始
 
 ```bash
 python -m osc_tracking.main
@@ -123,7 +135,9 @@ python -m osc_tracking.tools.osc_monitor          # OSCデバッグモニタ
 python -m osc_tracking.tools.download_model       # MediaPipeモデルDL
 python -m osc_tracking.tools.generate_checkerboard # チェッカーボード画像生成
 python -m osc_tracking.tools.simulate             # シミュレーションモード
+python -m osc_tracking.tools.connection_check     # SlimeVR OSC接続確認
 python -m osc_tracking.tools.benchmark --cam1 0 --cam2 1  # カメラ推論ベンチマーク
+python -m osc_tracking.tools.setup_wizard         # 初回セットアップウィザード
 ```
 
 ## アーキテクチャ
@@ -172,6 +186,7 @@ pytest
 | osc_sender | 98% |
 | visual_compass | 100% |
 | config | 100% |
+| camera_tracker | 36% |
 
 ## ライセンス
 

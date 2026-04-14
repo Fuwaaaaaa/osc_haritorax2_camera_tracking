@@ -61,8 +61,15 @@ class ComplementaryFilter:
     DRIFT_HOLD_SECONDS = 10.0
     DRIFT_NOISE_SCALE = 0.01  # 1% of normal when stationary
 
-    def __init__(self, compass_blend_factor: float):
+    def __init__(
+        self,
+        compass_blend_factor: float,
+        visible_threshold: float = 0.7,
+        partial_threshold: float = 0.3,
+    ):
         self.compass_blend_factor = max(0.0, min(1.0, compass_blend_factor))
+        self.visible_threshold = visible_threshold
+        self.partial_threshold = partial_threshold
         self.joints: dict[str, JointState] = {
             name: JointState() for name in JOINT_NAMES
         }
@@ -111,7 +118,7 @@ class ComplementaryFilter:
                 camera_position = None  # Reject outlier
 
         # Position update
-        if camera_position is not None and confidence > 0.3:
+        if camera_position is not None and confidence > self.partial_threshold:
             # First valid position: snap directly (no smoothing from origin)
             if np.allclose(state.last_valid_position, 0.0):
                 state.position = camera_position.copy()
@@ -126,7 +133,7 @@ class ComplementaryFilter:
 
         # Rotation update
         if imu_rotation is not None:
-            if camera_position is not None and confidence > 0.7:
+            if camera_position is not None and confidence > self.visible_threshold:
                 # Visible mode: blend current rotation toward IMU using Slerp
                 alpha = self._smooth_alpha(dt)
                 blend = alpha * self.compass_blend_factor

@@ -1,5 +1,7 @@
 # Quick Start Guide — テスト手順
 
+> **ヒント:** 初回の方は `python -m osc_tracking.tools.setup_wizard` で7ステップのガイド付きセットアップも利用できます。
+
 ## 事前準備（HaritoraX2不要）
 
 ### 1. 依存関係インストール

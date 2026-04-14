@@ -266,7 +266,7 @@ def main() -> None:
             cj = camera.read_joints() if not args.no_camera else None
             avg_conf = 0.0
             if cj:
-                confs = [c for _, c in cj.values()]
+                confs = [data[1] for data in cj.values()]
                 avg_conf = sum(confs) / len(confs) if confs else 0.0
 
             fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
@@ -278,7 +278,7 @@ def main() -> None:
 
             # Gesture detection
             if gesture and cj:
-                joint_positions = {name: pos for name, (pos, _) in cj.items()}
+                joint_positions = {name: data[0] for name, data in cj.items()}
                 detected = gesture.update(joint_positions)
                 if detected:
                     logger.info("Gesture detected: %s", detected)
@@ -297,27 +297,27 @@ def main() -> None:
 
             # Dashboard
             if dashboard:
-                joint_data = {name: {"conf": c} for name, (_, c) in cj.items()} if cj else {}
+                joint_data = {name: {"conf": data[1]} for name, data in cj.items()} if cj else {}
                 dashboard.update(mode.name, fps_now, avg_conf, joint_data)
 
             # Recorder
             if recorder and cj:
-                rec_data = {name: (pos, _get_rot(name), conf) for name, (pos, conf) in cj.items()}
+                rec_data = {name: (data[0], _get_rot(name), data[1]) for name, data in cj.items()}
                 recorder.record_frame(rec_data, mode.name)
 
             # VMC Protocol
             if vmc_sender and cj:
-                vmc_data = {name: (pos, _get_rot(name)) for name, (pos, _) in cj.items()}
+                vmc_data = {name: (data[0], _get_rot(name)) for name, data in cj.items()}
                 vmc_sender.send_frame(vmc_data)
 
             # BVH recording
             if bvh and cj:
-                bvh_data = {name: (pos, _get_rot(name)) for name, (pos, _) in cj.items()}
+                bvh_data = {name: (data[0], _get_rot(name)) for name, data in cj.items()}
                 bvh.add_frame(bvh_data)
 
             # Skeleton viewer
             if viewer and cj:
-                viewer.update({name: pos for name, (pos, _) in cj.items()})
+                viewer.update({name: data[0] for name, data in cj.items()})
 
             # Discord presence
             if discord:
@@ -325,7 +325,7 @@ def main() -> None:
 
             # REST API
             if api:
-                joint_data = {name: {"conf": c} for name, (_, c) in cj.items()} if cj else {}
+                joint_data = {name: {"conf": data[1]} for name, data in cj.items()} if cj else {}
                 api.update(mode.name, fps_now, joint_data)
 
             # Notifications  - only on mode change
