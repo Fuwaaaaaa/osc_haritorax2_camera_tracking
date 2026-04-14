@@ -39,6 +39,14 @@
 - **Priority:** P2
 - **Depends on:** コア機能安定後
 
+### カメラ別・部位別confidence分離
+- **What:** fusion_engine.pyのconfidence計算をカメラ別・部位別に分離。現在は全joint平均値をcam1_conf/cam2_confに同一入力
+- **Why:** (1) SINGLE_CAM_DEGRADEDモードが永遠にトリガーされない（cam_diff常に0）。(2) 上半身可視+下半身ロストでもVISIBLEになる（平均が閾値超え）
+- **How:** カメラサブプロセスがSharedMemoryにカメラ別の信頼度を書く。fusion_engine.pyがカメラ別・部位グループ別に信頼度を計算してstate_machineに渡す
+- **Effort:** M（CC: 30分）SharedMemoryレイアウト変更 + fusion_engine読み取り + テスト
+- **Priority:** P2
+- **Context:** Eng Review Issue 3 + Outside Voice指摘。SINGLE_CAM_DEGRADEDモードの前提条件
+
 ### 統一品質閾値テーブル
 - **What:** quality_meter、web_dashboard、state_machineで使う信頼度閾値を1つのテーブルに統一
 - **Why:** 現在 0.7/0.3 がコード内にハードコード散在。変更漏れのリスク
