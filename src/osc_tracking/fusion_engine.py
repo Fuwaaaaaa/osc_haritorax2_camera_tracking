@@ -74,16 +74,17 @@ class FusionEngine:
         # Clamp dt to prevent explosion after pause/sleep
         dt = min(dt, 0.1)
 
-        # Read camera data
+        # Read camera data (per-camera confidence from SharedMemory)
         camera_joints = self.camera.read_joints()
         cam1_conf = 0.0
         cam2_conf = 0.0
         if camera_joints:
-            confidences = [conf for _, conf in camera_joints.values()]
-            if confidences:
-                avg = sum(confidences) / len(confidences)
-                cam1_conf = avg  # Simplified — real impl splits per camera
-                cam2_conf = avg
+            cam1_vals = [c1 for _, _, c1, _ in camera_joints.values()]
+            cam2_vals = [c2 for _, _, _, c2 in camera_joints.values()]
+            if cam1_vals:
+                cam1_conf = sum(cam1_vals) / len(cam1_vals)
+            if cam2_vals:
+                cam2_conf = sum(cam2_vals) / len(cam2_vals)
 
         # Update OSC connectivity
         if self.receiver.is_connected:
@@ -98,7 +99,7 @@ class FusionEngine:
             camera_pos = None
             confidence = 0.0
             if camera_joints and joint_name in camera_joints:
-                camera_pos, confidence = camera_joints[joint_name]
+                camera_pos, confidence, _, _ = camera_joints[joint_name]
 
             imu_rotation = self.receiver.get_bone_rotation(joint_name)
 

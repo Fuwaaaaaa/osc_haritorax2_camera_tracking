@@ -34,9 +34,9 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# 9 joints x (3 position + 1 confidence + 1 timestamp) = 45 floats
+# 9 joints x (3 position + 2 per-camera vis + 1 combined + 1 timestamp) = 63 floats
 JOINT_COUNT = 9
-FLOATS_PER_JOINT = 5  # x, y, z, confidence, timestamp
+FLOATS_PER_JOINT = 7  # x, y, z, cam1_vis, cam2_vis, combined_conf, timestamp
 SHM_SIZE = JOINT_COUNT * FLOATS_PER_JOINT * 8  # float64 = 8 bytes
 SHM_NAME = "osc_tracking_camera"
 
@@ -123,11 +123,14 @@ class CameraTracker:
                 pass
             self._shm = None
 
-    def read_joints(self) -> dict[str, tuple[np.ndarray, float]] | None:
+    def read_joints(
+        self,
+    ) -> dict[str, tuple[np.ndarray, float, float, float]] | None:
         """Read latest joint data from shared memory.
 
         Returns:
-            Dict mapping joint name to (position_xyz, confidence),
+            Dict mapping joint name to
+            (position_xyz, combined_confidence, cam1_confidence, cam2_confidence),
             or None if shared memory is unavailable.
         """
         if self._shm is None:
@@ -153,10 +156,15 @@ class CameraTracker:
         for i, name in enumerate(JOINT_NAMES):
             if i >= JOINT_COUNT:
                 break
-            x, y, z, conf, ts = snapshot[i]
+            x, y, z, cam1_vis, cam2_vis, conf, ts = snapshot[i]
             if not np.isfinite(x) or (now - ts) > 0.5:
                 continue
-            results[name] = (np.array([x, y, z]), float(conf))
+            results[name] = (
+                np.array([x, y, z]),
+                float(conf),
+                float(cam1_vis),
+                float(cam2_vis),
+            )
 
         return results
 
@@ -295,18 +303,18 @@ def _camera_worker(
                     # No pose detected — write zero confidence
                     with shm_lock:
                         for i in range(JOINT_COUNT):
-                            buf[i] = [0.0, 0.0, 0.0, 0.0, now]
+                            buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
 
             except Exception as e:
                 logging.warning("MediaPipe inference failed: %s", e)
                 with shm_lock:
                     for i in range(JOINT_COUNT):
-                        buf[i] = [0.0, 0.0, 0.0, 0.0, now]
+                        buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
         else:
             # No MediaPipe — write zeros
             with shm_lock:
                 for i in range(JOINT_COUNT):
-                    buf[i] = [0.0, 0.0, 0.0, 0.0, now]
+                    buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
 
         # Frame rate control
         elapsed = time.monotonic() - loop_start
@@ -350,7 +358,7 @@ def _process_landmarks(buf, lm1, lm2, calib, resolution, now):
 
         indices = mp_indices.get(joint_name)
         if indices is None:
-            buf[i] = [0.0, 0.0, 0.0, 0.0, now]
+            buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
             continue
 
         idx_a, idx_b = indices
@@ -385,13 +393,13 @@ def _process_landmarks(buf, lm1, lm2, calib, resolution, now):
                     px2.reshape(1, 2),
                 )
                 pos = pts_3d[0] / 1000.0  # mm → meters
-                buf[i] = [pos[0], pos[1], pos[2], confidence, now]
+                buf[i] = [pos[0], pos[1], pos[2], vis1, vis2, confidence, now]
             except Exception:
-                buf[i] = [0.0, 0.0, 0.0, 0.0, now]
+                buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
         else:
             # Fallback: use MediaPipe's estimated z-depth (less accurate)
             z_est = lm1_a.z * w  # MediaPipe z is relative to hip depth
             pos_x = (lm1_a.x - 0.5) * 2.0  # Normalize to roughly -1..1
             pos_y = -(lm1_a.y - 0.5) * 2.0
             pos_z = -z_est / w
-            buf[i] = [pos_x, pos_y, pos_z, confidence * 0.5, now]
+            buf[i] = [pos_x, pos_y, pos_z, vis1, vis2, confidence * 0.5, now]
