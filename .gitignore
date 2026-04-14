@@ -19,3 +19,4 @@ calibration_data/
 *.npz
 session_logs/
 models/*.task
+*.spec

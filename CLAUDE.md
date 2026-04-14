@@ -33,6 +33,9 @@ python -m osc_tracking.tools.connection_check         # SlimeVR OSC接続確認
 python -m osc_tracking.tools.simulate                 # シミュレーションモード
 python -m osc_tracking.tools.benchmark --cam1 0 --cam2 1  # カメラ推論ベンチマーク
 python -m osc_tracking.tools.setup_wizard             # 初回セットアップウィザード
+python build_exe.py                                   # exe全ビルド
+python build_exe.py --main                            # メインexeのみ
+python build_exe.py --tools                           # ツールexeのみ
 ```
 
 ## Key Files

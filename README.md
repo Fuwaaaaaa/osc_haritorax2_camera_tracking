@@ -32,6 +32,26 @@ OSC対応IMUトラッカーと2台のWebカメラ（MediaPipe Pose Landmarker）
 
 ## インストール
 
+### 方法A: exe版（Python不要）
+
+[Releases](https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/releases)から最新版をダウンロードし、展開するだけで使えます。
+
+```
+osc_tracking/
+  osc_tracking.exe     # メインアプリ
+  osc_tools.exe        # ツール（セットアップ、ベンチマーク等）
+  config/default.json  # 設定ファイル
+```
+
+初回セットアップ:
+```bash
+osc_tools.exe download_model    # MediaPipeモデルDL
+osc_tools.exe setup_wizard      # ガイド付きセットアップ
+osc_tracking.exe                # トラッキング開始
+```
+
+### 方法B: Python環境（開発者向け）
+
 ```bash
 git clone https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking.git
 cd osc_haritorax2_camera_tracking
