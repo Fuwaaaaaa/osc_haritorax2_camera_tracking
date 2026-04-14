@@ -8,6 +8,15 @@
 ### ~~MediaPipe API移行確認~~ ✅ 完了
 - **解決:** コードは既にMediaPipe Pose Landmarker Tasks APIを使用。CLAUDE.mdにも記載済み。
 
+### ~~compass_blend_factorバグ修正~~ ✅ 完了
+- **解決:** config→FusionEngine→ComplementaryFilter/VisualCompassに正しくスレッディング。ハードコード0.3を排除。
+
+### ~~FUTON_MODE実装~~ ✅ 完了
+- **解決:** 6モードステートマシンに追加。ピッチ検出、ドウェルタイム、NaN安全、設定可能なトリガージョイント。
+
+### ~~camera_tracker.pyテストカバレッジ~~ ✅ 完了
+- **解決:** 17件のテスト追加。SharedMemory読み書き、失効データ、NaN、ライフサイクル、トーンリード。
+
 ## P2 - Important
 
 ### OBSオーバーレイ（WebSocketインターフェース）
@@ -25,6 +34,9 @@
 
 ### ~~セットアップウィザード（in-app）~~ ✅ 完了
 - **解決:** 7ステップCLIウィザード実装（setup_wizard.py）。モデルDL→カメラ確認→SlimeVR接続→ポート確認→キャリブ→テスト→設定保存。テスト10件。
+
+### ~~カメラ別・部位別confidence分離~~ ✅ 完了
+- **解決:** カメラサブプロセスがSharedMemoryにカメラ別の信頼度を書き込み、fusion_engine.pyがカメラ別に信頼度を計算してstate_machineに渡す。SINGLE_CAM_DEGRADEDモードが正しくトリガーされるように。
 
 ### ~~統一品質閾値テーブル~~ ✅ 完了
 - **解決:** ComplementaryFilter/web_dashboard/preview.pyのハードコード0.7/0.3をconfig値に置換。閾値はconfig.pyで一元管理。

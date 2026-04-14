@@ -63,9 +63,11 @@ class ComplementaryFilter:
 
     def __init__(
         self,
+        compass_blend_factor: float,
         visible_threshold: float = 0.7,
         partial_threshold: float = 0.3,
     ):
+        self.compass_blend_factor = max(0.0, min(1.0, compass_blend_factor))
         self.visible_threshold = visible_threshold
         self.partial_threshold = partial_threshold
         self.joints: dict[str, JointState] = {
@@ -134,7 +136,7 @@ class ComplementaryFilter:
             if camera_position is not None and confidence > self.visible_threshold:
                 # Visible mode: blend current rotation toward IMU using Slerp
                 alpha = self._smooth_alpha(dt)
-                blend = alpha * 0.3
+                blend = alpha * self.compass_blend_factor
                 from scipy.spatial.transform import Slerp as ScipySlerp
                 key_rots = Rotation.concatenate([state.rotation, imu_rotation])
                 slerp = ScipySlerp([0.0, 1.0], key_rots)

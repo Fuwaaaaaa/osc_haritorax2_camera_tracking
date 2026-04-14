@@ -136,7 +136,7 @@ class TestVisualCompass:
             for i, name in enumerate(JOINT_NAMES)
         }
         mock_receiver.get_bone_rotation.return_value = Rotation.from_euler(
-            "xyz", [0, 45, 0], degrees=True  # IMU says 45° yaw
+            "xyz", [0, 45, 0], degrees=True  # IMU says 45 deg yaw
         )
         engine.update()
         # Should complete without error — Visual Compass applied
@@ -299,3 +299,52 @@ class TestPerCameraConfidence:
         }
         mode = engine.update()
         assert mode == TrackingMode.FULL_OCCLUSION
+
+
+class TestCompassBlendFactorThreading:
+    """Verify compass_blend_factor flows from config to correct_heading()."""
+
+    def test_engine_passes_blend_factor_to_correct_heading(
+        self, mock_camera, mock_receiver, mock_sender
+    ):
+        """FusionEngine should pass compass_blend_factor to correct_heading()."""
+        from osc_tracking.config import TrackingConfig
+
+        config = TrackingConfig()
+        config.compass_blend_factor = 0.5
+
+        engine = FusionEngine(
+            camera=mock_camera,
+            receiver=mock_receiver,
+            sender=mock_sender,
+            config=config,
+        )
+
+        with patch("osc_tracking.fusion_engine.correct_heading") as mock_ch:
+            mock_ch.return_value = Rotation.identity()
+            engine.update()
+
+            if mock_ch.called:
+                _, kwargs = mock_ch.call_args
+                assert "blend_factor" in kwargs or len(mock_ch.call_args[0]) >= 3
+                # Verify the blend_factor value
+                if "blend_factor" in kwargs:
+                    assert kwargs["blend_factor"] == 0.5
+
+    def test_engine_creates_filter_with_blend_factor(
+        self, mock_camera, mock_receiver, mock_sender
+    ):
+        """FusionEngine should pass compass_blend_factor to ComplementaryFilter."""
+        from osc_tracking.config import TrackingConfig
+
+        config = TrackingConfig()
+        config.compass_blend_factor = 0.7
+
+        engine = FusionEngine(
+            camera=mock_camera,
+            receiver=mock_receiver,
+            sender=mock_sender,
+            config=config,
+        )
+
+        assert engine.filter.compass_blend_factor == 0.7

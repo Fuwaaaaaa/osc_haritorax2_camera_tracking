@@ -55,6 +55,12 @@ class TrackingConfig:
     # Visual compass
     compass_blend_factor: float = 0.3
 
+    # FUTON_MODE
+    futon_pitch_threshold: float = 60.0
+    futon_exit_threshold: float = 30.0
+    futon_dwell_time_sec: float = 0.5
+    futon_trigger_joint: str = "Chest"
+
     def save(self, path: Path | None = None) -> None:
         """Save config to JSON file."""
         path = path or USER_CONFIG

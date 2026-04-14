@@ -151,3 +151,222 @@ class TestSmoothRecovery:
 
         mode = sm.update(0.9, 0.9)
         assert mode == TrackingMode.VISIBLE
+
+
+class TestFutonMode:
+    """Tests for FUTON_MODE (lying down detection)."""
+
+    @pytest.fixture
+    def sm_futon(self):
+        config = ModeConfig(
+            hysteresis_sec=0.0,
+            futon_pitch_threshold=60.0,
+            futon_exit_threshold=30.0,
+            futon_dwell_time_sec=0.0,  # Disable dwell for unit tests
+        )
+        machine = TrackingStateMachine(config=config)
+        machine._last_osc_time = time.monotonic()
+        return machine
+
+    def test_high_pitch_enters_futon_mode(self, sm_futon):
+        """Pitch > 60 degrees should trigger FUTON_MODE."""
+        sm_futon.on_imu_pitch(70.0)
+        mode = sm_futon.update(0.9, 0.9)
+        assert mode == TrackingMode.FUTON_MODE
+
+    def test_upright_exits_futon_mode(self, sm_futon):
+        """Pitch < 30 degrees should exit FUTON_MODE."""
+        sm_futon.on_imu_pitch(70.0)
+        sm_futon.update(0.9, 0.9)
+        assert sm_futon.mode == TrackingMode.FUTON_MODE
+
+        sm_futon.on_imu_pitch(20.0)
+        mode = sm_futon.update(0.9, 0.9)
+        assert mode != TrackingMode.FUTON_MODE
+
+    def test_pitch_in_deadband_stays_in_mode(self, sm_futon):
+        """Pitch between 30 and 60 should not change mode (hysteresis band)."""
+        sm_futon.on_imu_pitch(70.0)
+        sm_futon.update(0.9, 0.9)
+        assert sm_futon.mode == TrackingMode.FUTON_MODE
+
+        sm_futon.on_imu_pitch(45.0)  # In deadband
+        mode = sm_futon.update(0.9, 0.9)
+        assert mode == TrackingMode.FUTON_MODE  # Should stay
+
+    def test_imu_disconnected_overrides_futon(self, sm_futon):
+        """IMU_DISCONNECTED has higher priority than FUTON_MODE."""
+        sm_futon.on_imu_pitch(70.0)
+        sm_futon.update(0.9, 0.9)
+        assert sm_futon.mode == TrackingMode.FUTON_MODE
+
+        # Simulate OSC timeout
+        now = time.monotonic()
+        sm_futon._last_osc_time = now - 2.0
+        mode = sm_futon.update(0.9, 0.9, now=now)
+        assert mode == TrackingMode.IMU_DISCONNECTED
+
+    def test_nan_pitch_does_not_trigger_futon(self, sm_futon):
+        """NaN pitch should be ignored — never trigger FUTON_MODE."""
+        import math
+        sm_futon.on_imu_pitch(float("nan"))
+        mode = sm_futon.update(0.9, 0.9)
+        assert mode != TrackingMode.FUTON_MODE
+
+    def test_inf_pitch_does_not_trigger_futon(self, sm_futon):
+        """Infinite pitch should be ignored."""
+        sm_futon.on_imu_pitch(float("inf"))
+        mode = sm_futon.update(0.9, 0.9)
+        assert mode != TrackingMode.FUTON_MODE
+
+    def test_dwell_time_prevents_flapping(self, monkeypatch):
+        """Mode should not transition until dwell time has elapsed."""
+        config = ModeConfig(
+            hysteresis_sec=0.0,
+            futon_pitch_threshold=60.0,
+            futon_exit_threshold=30.0,
+            futon_dwell_time_sec=0.5,
+        )
+        sm = TrackingStateMachine(config=config)
+
+        fake_time = [100.0]
+        monkeypatch.setattr(time, "monotonic", lambda: fake_time[0])
+        sm._last_osc_time = fake_time[0]
+
+        sm.on_imu_pitch(70.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        # Should NOT yet be in FUTON_MODE (dwell not elapsed)
+        assert mode != TrackingMode.FUTON_MODE
+
+        # Advance past dwell time
+        fake_time[0] = 100.6
+        sm.on_imu_pitch(70.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode == TrackingMode.FUTON_MODE
+
+    def test_futon_mode_with_no_cameras(self, sm_futon):
+        """FUTON_MODE should work even with no camera data."""
+        sm_futon.on_imu_pitch(70.0)
+        mode = sm_futon.update(0.0, 0.0)
+        assert mode == TrackingMode.FUTON_MODE
+
+    def test_exit_dwell_time_prevents_flicker(self, monkeypatch):
+        """Brief dip below exit threshold should NOT immediately exit FUTON_MODE."""
+        config = ModeConfig(
+            hysteresis_sec=0.0,
+            futon_pitch_threshold=60.0,
+            futon_exit_threshold=30.0,
+            futon_dwell_time_sec=0.5,
+        )
+        sm = TrackingStateMachine(config=config)
+
+        fake_time = [100.0]
+        monkeypatch.setattr(time, "monotonic", lambda: fake_time[0])
+        sm._last_osc_time = fake_time[0]
+
+        # Enter FUTON_MODE (past dwell time)
+        sm.on_imu_pitch(70.0)
+        fake_time[0] = 100.6
+        sm.on_imu_pitch(70.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode == TrackingMode.FUTON_MODE
+
+        # Brief dip below exit threshold — should NOT exit yet
+        fake_time[0] = 100.7
+        sm.on_imu_pitch(20.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode == TrackingMode.FUTON_MODE  # Still in FUTON (dwell not elapsed)
+
+        # After dwell time — NOW should exit
+        fake_time[0] = 101.3
+        sm.on_imu_pitch(20.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode != TrackingMode.FUTON_MODE
+
+    def test_exit_dwell_cancelled_by_returning_to_lying(self, monkeypatch):
+        """If user briefly sits up then lies back down, exit should be cancelled."""
+        config = ModeConfig(
+            hysteresis_sec=0.0,
+            futon_pitch_threshold=60.0,
+            futon_exit_threshold=30.0,
+            futon_dwell_time_sec=0.5,
+        )
+        sm = TrackingStateMachine(config=config)
+
+        fake_time = [100.0]
+        monkeypatch.setattr(time, "monotonic", lambda: fake_time[0])
+        sm._last_osc_time = fake_time[0]
+
+        # Enter FUTON_MODE
+        sm.on_imu_pitch(70.0)
+        fake_time[0] = 100.6
+        sm.on_imu_pitch(70.0)
+        sm.update(0.9, 0.9, now=fake_time[0])
+        assert sm.mode == TrackingMode.FUTON_MODE
+
+        # Start exiting (pitch drops below exit threshold)
+        fake_time[0] = 100.7
+        sm.on_imu_pitch(20.0)
+
+        # Before dwell completes, return to lying down
+        fake_time[0] = 100.9
+        sm.on_imu_pitch(70.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode == TrackingMode.FUTON_MODE  # Exit cancelled
+
+
+class TestBothCamerasLost:
+    """Explicit tests for simultaneous dual camera loss (Phase 4)."""
+
+    @pytest.fixture
+    def sm_hyst(self):
+        config = ModeConfig(hysteresis_sec=0.5)
+        machine = TrackingStateMachine(config=config)
+        machine._last_osc_time = time.monotonic()
+        return machine
+
+    def test_simultaneous_drop_bypasses_hysteresis(self, sm_hyst):
+        """Both cameras < 0.05 should go straight to FULL_OCCLUSION."""
+        sm_hyst.update(0.9, 0.9, now=time.monotonic())
+        assert sm_hyst.mode == TrackingMode.VISIBLE
+
+        mode = sm_hyst.update(0.01, 0.02, now=time.monotonic())
+        assert mode == TrackingMode.FULL_OCCLUSION  # Immediate, no hysteresis
+
+    def test_one_camera_lost_does_not_bypass(self, sm_hyst):
+        """Only one camera below 0.05 should use normal hysteresis."""
+        sm_hyst.update(0.9, 0.9, now=time.monotonic())
+        now = time.monotonic()
+        mode = sm_hyst.update(0.01, 0.9, now=now)
+        # Should NOT be FULL_OCCLUSION yet (hysteresis active)
+        assert mode != TrackingMode.FULL_OCCLUSION
+
+    def test_recovery_from_both_lost(self, sm_hyst):
+        """Recovery from FULL_OCCLUSION when cameras return."""
+        sm_hyst.update(0.01, 0.01, now=time.monotonic())
+        assert sm_hyst.mode == TrackingMode.FULL_OCCLUSION
+
+        now = time.monotonic()
+        sm_hyst.update(0.9, 0.9, now=now)
+        # With hysteresis, might still be transitioning
+        sm_hyst.update(0.9, 0.9, now=now + 0.6)
+        assert sm_hyst.mode == TrackingMode.VISIBLE
+
+    def test_both_cameras_return_at_different_times(self, sm_hyst):
+        """One camera returns first, then the second."""
+        now = time.monotonic()
+        sm_hyst._last_osc_time = now
+        sm_hyst.update(0.01, 0.01, now=now)
+        assert sm_hyst.mode == TrackingMode.FULL_OCCLUSION
+
+        # Cam1 returns but cam2 still down — should not be VISIBLE
+        sm_hyst._last_osc_time = now + 0.1
+        mode = sm_hyst.update(0.9, 0.01, now=now + 0.1)
+        assert mode != TrackingMode.VISIBLE
+
+        # Both cameras back — wait for hysteresis
+        sm_hyst._last_osc_time = now + 0.7
+        sm_hyst.update(0.9, 0.9, now=now + 0.7)
+        sm_hyst._last_osc_time = now + 1.3
+        sm_hyst.update(0.9, 0.9, now=now + 1.3)
+        assert sm_hyst.mode == TrackingMode.VISIBLE
