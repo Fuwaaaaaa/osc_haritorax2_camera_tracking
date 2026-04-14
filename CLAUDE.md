@@ -1,7 +1,7 @@
 # OSC Tracking
 
 ## Project
-HaritoraX2 + デュアルWebカメラのセンサーフュージョンによるVRフルボディトラッキングシステム。
+OSC対応IMUトラッカー + デュアルWebカメラのセンサーフュージョンによるVRフルボディトラッキングミドルウェア。HaritoraX2が最初の対応デバイス。
 
 ## Language
 - コード・コメント: 英語
