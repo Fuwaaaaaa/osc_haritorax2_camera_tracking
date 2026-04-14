@@ -110,11 +110,13 @@ def check_cameras(cam1_index: int = 0, cam2_index: int = 1) -> CameraCheckResult
     results = {}
     for label, idx in [("cam1", cam1_index), ("cam2", cam2_index)]:
         cap = cv2.VideoCapture(idx)
-        ok = False
-        if cap.isOpened():
-            ret, _ = cap.read()
-            ok = ret
-        cap.release()
+        try:
+            ok = False
+            if cap.isOpened():
+                ret, _ = cap.read()
+                ok = ret
+        finally:
+            cap.release()
         results[label] = ok
 
     return CameraCheckResult(cam1_ok=results["cam1"], cam2_ok=results["cam2"])
@@ -127,14 +129,14 @@ def check_mediapipe_model(model_path: str) -> bool:
 
 def check_osc_port_available(port: int) -> bool:
     """Check if a UDP port is available for binding."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("127.0.0.1", port))
-        sock.close()
         return True
     except OSError:
         return False
+    finally:
+        sock.close()
 
 
 def _print_header() -> None:

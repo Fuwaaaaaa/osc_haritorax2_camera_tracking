@@ -157,7 +157,9 @@ class CameraTracker:
             if i >= JOINT_COUNT:
                 break
             x, y, z, cam1_vis, cam2_vis, conf, ts = snapshot[i]
-            if not np.isfinite(x) or (now - ts) > 0.5:
+            if not (np.isfinite(x) and np.isfinite(y) and np.isfinite(z)):
+                continue
+            if (now - ts) > 0.5:
                 continue
             results[name] = (
                 np.array([x, y, z]),
