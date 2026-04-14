@@ -28,6 +28,39 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+class SubsystemManager:
+    """Manages optional subsystem lifecycle (start/stop)."""
+
+    def __init__(self):
+        self._subsystems: list[tuple[str, object]] = []
+
+    def add(self, name: str, subsystem: object) -> None:
+        self._subsystems.append((name, subsystem))
+
+    def get(self, name: str) -> object | None:
+        for n, s in self._subsystems:
+            if n == name:
+                return s
+        return None
+
+    def start_all(self) -> None:
+        for name, sub in self._subsystems:
+            if hasattr(sub, "start"):
+                sub.start()
+            elif hasattr(sub, "connect"):
+                sub.connect()
+
+    def stop_all(self) -> None:
+        for name, sub in reversed(self._subsystems):
+            try:
+                if hasattr(sub, "stop"):
+                    sub.stop()
+                elif hasattr(sub, "close"):
+                    sub.close()
+            except Exception as e:
+                logger.warning("Error stopping %s: %s", name, e)
+
 # ANSI colors for mode display
 MODE_COLORS = {
     TrackingMode.VISIBLE: "\033[92m",           # green
@@ -105,16 +138,16 @@ def main() -> None:
     engine = FusionEngine(camera=camera, receiver=receiver, sender=sender, config=cfg)
 
     # Optional subsystems
-    tray: QualityMeter | None = None
-    dashboard: WebDashboard | None = None
-    profiler: PerformanceProfiler | None = None
-    gesture: GestureDetector | None = None
-    recorder = None
+    subs = SubsystemManager()
+    tray = dashboard = profiler = gesture = recorder = None
+    vmc_sender = viewer = discord = api = bvh = None
 
     if not args.no_tray:
         tray = QualityMeter()
+        subs.add("tray", tray)
     if not args.no_dashboard:
         dashboard = WebDashboard(port=args.dashboard_port)
+        subs.add("dashboard", dashboard)
     if args.profile:
         profiler = PerformanceProfiler()
     if not args.no_camera:
@@ -123,48 +156,34 @@ def main() -> None:
     if args.record:
         from .recorder import TrackingRecorder
         recorder = TrackingRecorder()
-
-    # VMC Protocol output
-    vmc_sender = None
+        subs.add("recorder", recorder)
     if args.vmc:
         from .vmc_sender import VMCSender
         vmc_sender = VMCSender(port=args.vmc_port)
-
-    # 3D skeleton viewer
-    viewer = None
+        subs.add("vmc", vmc_sender)
     if args.viewer:
         from .skeleton_viewer import SkeletonViewer
         viewer = SkeletonViewer()
-
-    # Discord Rich Presence
-    discord = None
+        subs.add("viewer", viewer)
     if args.discord:
         from .discord_presence import DiscordPresence
         discord = DiscordPresence()
-
-    # REST API
-    api = None
+        subs.add("discord", discord)
     if args.api:
         from .rest_api import RestAPI
         api = RestAPI(port=args.api_port)
-
-    # OSC address remapper
+        subs.add("api", api)
     if args.remap:
         remapper = OSCRemapper(profile_name=args.remap)
         logger.info("OSC remap profile: %s", remapper.profile.name)
-
-    # Motion smoothing preset
     if args.smoothing:
         preset = get_preset(args.smoothing)
         engine.filter.SMOOTH_RATE = preset.smooth_rate
         engine.filter.DRIFT_VELOCITY_THRESHOLD = preset.noise_threshold
         logger.info("Smoothing preset: %s (rate=%.1f)", preset.name, preset.smooth_rate)
 
-    # Notifications (always on)
     notifier = NotificationManager()
 
-    # BVH exporter
-    bvh = None
     if args.bvh:
         from .bvh_exporter import BVHExporter
         bvh = BVHExporter()
@@ -172,24 +191,10 @@ def main() -> None:
     def shutdown(sig, frame):
         logger.info("Shutting down...")
         engine.stop()
-        if tray:
-            tray.stop()
-        if dashboard:
-            dashboard.stop()
-        if recorder:
-            count = recorder.stop()
-            print(f"  Recording saved: {count} frames")
+        subs.stop_all()
         if bvh:
             frames = bvh.export(args.bvh)
             print(f"  BVH exported: {frames} frames to {args.bvh}")
-        if viewer:
-            viewer.stop()
-        if api:
-            api.stop()
-        if vmc_sender:
-            vmc_sender.close()
-        if discord:
-            discord.stop()
         if profiler:
             print(profiler.report())
         sys.exit(0)
@@ -199,7 +204,7 @@ def main() -> None:
 
     # Print startup info
     print("=" * 50)
-    print("  OSC Tracking  - HaritoraX2 + Dual WebCam")
+    print("  OSC Tracking  - IMU x Dual WebCam Fusion")
     print("=" * 50)
     print(f"  Cameras: {cfg.cam1_index}, {cfg.cam2_index} @ {cfg.camera_resolution}")
     print(f"  OSC receive: {cfg.osc_receive_host}:{cfg.osc_receive_port}")
@@ -224,20 +229,7 @@ def main() -> None:
     print()
 
     # Start subsystems
-    if tray:
-        tray.start()
-    if dashboard:
-        dashboard.start()
-    if recorder:
-        recorder.start()
-    if vmc_sender:
-        vmc_sender.connect()
-    if viewer:
-        viewer.start()
-    if discord:
-        discord.start()
-    if api:
-        api.start()
+    subs.start_all()
 
     if not args.no_camera:
         engine.start()
@@ -371,23 +363,10 @@ def main() -> None:
         pass
     finally:
         engine.stop()
-        if tray:
-            tray.stop()
-        if dashboard:
-            dashboard.stop()
-        if recorder:
-            recorder.stop()
+        subs.stop_all()
         if bvh:
             frames = bvh.export(args.bvh)
             print(f"  BVH exported: {frames} frames")
-        if viewer:
-            viewer.stop()
-        if api:
-            api.stop()
-        if vmc_sender:
-            vmc_sender.close()
-        if discord:
-            discord.stop()
         if profiler:
             print(profiler.report())
 
