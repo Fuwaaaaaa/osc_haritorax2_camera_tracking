@@ -91,7 +91,8 @@ es.onmessage=e=>{
   document.getElementById('fps').textContent=Math.round(d.fps||0);
   const confEl=document.getElementById('conf');
   confEl.innerHTML=Math.round((d.avg_conf||0)*100)+'<span class="card-unit">%</span>';
-  confEl.className='card-value '+(d.avg_conf>0.7?'green':d.avg_conf>0.3?'yellow':'red');
+  const vt=d.visible_threshold||0.7,pt=d.partial_threshold||0.3;
+  confEl.className='card-value '+(d.avg_conf>vt?'green':d.avg_conf>pt?'yellow':'red');
   const st=document.getElementById('status');
   st.textContent=ml;
   st.style.color=mc==='green'?'var(--green)':mc==='red'?'var(--red)':'var(--yellow)';
@@ -101,9 +102,9 @@ es.onmessage=e=>{
   if(d.joints){
     jc.innerHTML='';
     for(const[name,j]of Object.entries(d.joints)){
-      const c=j.conf>0.7?'var(--green)':j.conf>0.3?'var(--yellow)':'var(--red)';
-      const cc=j.conf>0.7?'green':j.conf>0.3?'yellow':'red';
-      const lbl=j.conf>0.7?'GOOD':j.conf>0.3?'WARN':'LOW';
+      const c=j.conf>vt?'var(--green)':j.conf>pt?'var(--yellow)':'var(--red)';
+      const cc=j.conf>vt?'green':j.conf>pt?'yellow':'red';
+      const lbl=j.conf>vt?'GOOD':j.conf>pt?'WARN':'LOW';
       jc.innerHTML+=`<div class="joint"><span class="joint-name">${name}</span>`+
         `<div class="bar"><div class="bar-fill" style="width:${j.conf*100}%;background:${c}"></div></div>`+
         `<span class="joint-conf ${cc}">${(j.conf*100).toFixed(0)}% ${lbl}</span></div>`;
@@ -162,13 +163,23 @@ class WebDashboard:
         self._thread.start()
         logger.info("Dashboard running at http://localhost:%d", self.port)
 
-    def update(self, mode: str, fps: float, avg_conf: float, joints: dict | None = None) -> None:
+    def update(
+        self,
+        mode: str,
+        fps: float,
+        avg_conf: float,
+        joints: dict | None = None,
+        visible_threshold: float = 0.7,
+        partial_threshold: float = 0.3,
+    ) -> None:
         with _lock:
             _latest_state.update({
                 "mode": mode,
                 "fps": round(fps, 1),
                 "avg_conf": round(avg_conf, 3),
                 "joints": joints or {},
+                "visible_threshold": visible_threshold,
+                "partial_threshold": partial_threshold,
             })
 
     def stop(self) -> None:
