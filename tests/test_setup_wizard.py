@@ -1,16 +1,13 @@
 """Tests for setup wizard — prerequisite checks and step logic."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from osc_tracking.tools.setup_wizard import (
+    WIZARD_STEPS,
+    WizardStep,
     check_cameras,
     check_mediapipe_model,
     check_osc_port_available,
-    WizardStep,
-    WIZARD_STEPS,
 )
 
 

@@ -208,7 +208,6 @@ class TestFutonMode:
 
     def test_nan_pitch_does_not_trigger_futon(self, sm_futon):
         """NaN pitch should be ignored — never trigger FUTON_MODE."""
-        import math
         sm_futon.on_imu_pitch(float("nan"))
         mode = sm_futon.update(0.9, 0.9)
         assert mode != TrackingMode.FUTON_MODE
@@ -315,8 +314,8 @@ class TestFutonMode:
         assert mode == TrackingMode.FUTON_MODE  # Exit cancelled
 
 
-class TestBothCamerasLost:
-    """Explicit tests for simultaneous dual camera loss (Phase 4)."""
+class TestBothCamerasLostWithHysteresis:
+    """Explicit tests for simultaneous dual camera loss with hysteresis (Phase 4)."""
 
     @pytest.fixture
     def sm_hyst(self):

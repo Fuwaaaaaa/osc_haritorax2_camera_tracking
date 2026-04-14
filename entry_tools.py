@@ -11,8 +11,8 @@ Usage:
     osc_tools.exe simulate
     osc_tools.exe checkerboard
 """
-import sys
 import os
+import sys
 
 if getattr(sys, 'frozen', False):
     base = sys._MEIPASS
