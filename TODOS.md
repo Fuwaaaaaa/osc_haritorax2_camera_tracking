@@ -8,6 +8,15 @@
 ### ~~MediaPipe API移行確認~~ ✅ 完了
 - **解決:** コードは既にMediaPipe Pose Landmarker Tasks APIを使用。CLAUDE.mdにも記載済み。
 
+### ~~compass_blend_factorバグ修正~~ ✅ 完了
+- **解決:** config→FusionEngine→ComplementaryFilter/VisualCompassに正しくスレッディング。ハードコード0.3を排除。
+
+### ~~FUTON_MODE実装~~ ✅ 完了
+- **解決:** 6モードステートマシンに追加。ピッチ検出、ドウェルタイム、NaN安全、設定可能なトリガージョイント。
+
+### ~~camera_tracker.pyテストカバレッジ~~ ✅ 完了
+- **解決:** 17件のテスト追加。SharedMemory読み書き、失効データ、NaN、ライフサイクル、トーンリード。
+
 ## P2 - Important
 
 ### OBSオーバーレイ（WebSocketインターフェース）
@@ -29,6 +38,14 @@
 - **Effort:** M（CC: 30分）
 - **Priority:** P2
 - **Depends on:** コア機能安定後
+
+### カメラ別・部位別confidence分離
+- **What:** fusion_engine.pyのconfidence計算をカメラ別・部位別に分離。現在は全joint平均値をcam1_conf/cam2_confに同一入力
+- **Why:** (1) SINGLE_CAM_DEGRADEDモードが永遠にトリガーされない（cam_diff常に0）。(2) 上半身可視+下半身ロストでもVISIBLEになる（平均が閾値超え）
+- **How:** カメラサブプロセスがSharedMemoryにカメラ別の信頼度を書く。fusion_engine.pyがカメラ別・部位グループ別に信頼度を計算してstate_machineに渡す
+- **Effort:** M（CC: 30分）SharedMemoryレイアウト変更 + fusion_engine読み取り + テスト
+- **Priority:** P2
+- **Context:** Eng Review Issue 3 + Outside Voice指摘。SINGLE_CAM_DEGRADEDモードの前提条件
 
 ### 統一品質閾値テーブル
 - **What:** quality_meter、web_dashboard、state_machineで使う信頼度閾値を1つのテーブルに統一

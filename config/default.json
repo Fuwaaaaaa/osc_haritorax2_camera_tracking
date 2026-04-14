@@ -19,5 +19,9 @@
   "smooth_rate": 5.0,
   "drift_velocity_threshold": 0.02,
   "drift_hold_seconds": 10.0,
-  "compass_blend_factor": 0.3
+  "compass_blend_factor": 0.3,
+  "futon_pitch_threshold": 60.0,
+  "futon_exit_threshold": 30.0,
+  "futon_dwell_time_sec": 0.5,
+  "futon_trigger_joint": "Chest"
 }
