@@ -40,12 +40,18 @@ python -m osc_tracking.tools.calibrate --cam1 0 --cam2 1
 
 ### 方法A: SlimeTora経由（推奨）
 
+> **詳細ガイド:** [docs/haritora-setup-guide.md](docs/haritora-setup-guide.md) にスクリーンショット付きの手順があります。
+
 1. **SlimeToraをインストール**: https://github.com/OCSYT/SlimeTora/releases
 2. **SlimeVR Serverをインストール**: https://slimevr.dev/download
 3. HaritoraX2の電源を入れる
-4. SlimeToraでHaritoraX2に接続
-5. SlimeVR ServerでOSC出力を有効化（Settings → OSC）
-6. トラッキング開始:
+4. SlimeToraでHaritoraX2に接続（8トラッカーが認識されること）
+5. SlimeVR ServerでOSC出力を有効化（Settings → OSC → Port: **6969**）
+6. 接続確認:
+```bash
+python -m osc_tracking.tools.connection_check
+```
+7. `HEALTH: GOOD` を確認後、トラッキング開始:
 ```bash
 python -m osc_tracking.main
 ```
