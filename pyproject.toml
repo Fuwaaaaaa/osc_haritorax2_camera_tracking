@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "osc-tracking"
 version = "0.2.2"
-description = "HaritoraX2 x Dual WebCam Hybrid Tracking System"
+description = "IMU x Dual WebCam Sensor Fusion Middleware for VR Full-Body Tracking"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
