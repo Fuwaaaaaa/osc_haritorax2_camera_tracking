@@ -250,6 +250,70 @@ class TestFutonMode:
         mode = sm_futon.update(0.0, 0.0)
         assert mode == TrackingMode.FUTON_MODE
 
+    def test_exit_dwell_time_prevents_flicker(self, monkeypatch):
+        """Brief dip below exit threshold should NOT immediately exit FUTON_MODE."""
+        config = ModeConfig(
+            hysteresis_sec=0.0,
+            futon_pitch_threshold=60.0,
+            futon_exit_threshold=30.0,
+            futon_dwell_time_sec=0.5,
+        )
+        sm = TrackingStateMachine(config=config)
+
+        fake_time = [100.0]
+        monkeypatch.setattr(time, "monotonic", lambda: fake_time[0])
+        sm._last_osc_time = fake_time[0]
+
+        # Enter FUTON_MODE (past dwell time)
+        sm.on_imu_pitch(70.0)
+        fake_time[0] = 100.6
+        sm.on_imu_pitch(70.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode == TrackingMode.FUTON_MODE
+
+        # Brief dip below exit threshold — should NOT exit yet
+        fake_time[0] = 100.7
+        sm.on_imu_pitch(20.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode == TrackingMode.FUTON_MODE  # Still in FUTON (dwell not elapsed)
+
+        # After dwell time — NOW should exit
+        fake_time[0] = 101.3
+        sm.on_imu_pitch(20.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode != TrackingMode.FUTON_MODE
+
+    def test_exit_dwell_cancelled_by_returning_to_lying(self, monkeypatch):
+        """If user briefly sits up then lies back down, exit should be cancelled."""
+        config = ModeConfig(
+            hysteresis_sec=0.0,
+            futon_pitch_threshold=60.0,
+            futon_exit_threshold=30.0,
+            futon_dwell_time_sec=0.5,
+        )
+        sm = TrackingStateMachine(config=config)
+
+        fake_time = [100.0]
+        monkeypatch.setattr(time, "monotonic", lambda: fake_time[0])
+        sm._last_osc_time = fake_time[0]
+
+        # Enter FUTON_MODE
+        sm.on_imu_pitch(70.0)
+        fake_time[0] = 100.6
+        sm.on_imu_pitch(70.0)
+        sm.update(0.9, 0.9, now=fake_time[0])
+        assert sm.mode == TrackingMode.FUTON_MODE
+
+        # Start exiting (pitch drops below exit threshold)
+        fake_time[0] = 100.7
+        sm.on_imu_pitch(20.0)
+
+        # Before dwell completes, return to lying down
+        fake_time[0] = 100.9
+        sm.on_imu_pitch(70.0)
+        mode = sm.update(0.9, 0.9, now=fake_time[0])
+        assert mode == TrackingMode.FUTON_MODE  # Exit cancelled
+
 
 class TestBothCamerasLost:
     """Explicit tests for simultaneous dual camera loss (Phase 4)."""

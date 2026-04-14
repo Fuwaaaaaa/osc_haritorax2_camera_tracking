@@ -71,6 +71,7 @@ class TrackingStateMachine:
         self._resync_start: float | None = None
         self._futon_active: bool = False
         self._futon_pending_since: float | None = None
+        self._futon_exit_pending_since: float | None = None
 
     @property
     def is_resyncing(self) -> bool:
@@ -96,6 +97,7 @@ class TrackingStateMachine:
         now = time.monotonic()
         abs_pitch = abs(pitch_degrees)
         if abs_pitch >= self.config.futon_pitch_threshold:
+            self._futon_exit_pending_since = None  # Cancel any pending exit
             if not self._futon_active:
                 if self._futon_pending_since is None:
                     self._futon_pending_since = now
@@ -104,8 +106,16 @@ class TrackingStateMachine:
                     self._futon_active = True
                     self._futon_pending_since = None
         elif abs_pitch < self.config.futon_exit_threshold:
-            self._futon_active = False
-            self._futon_pending_since = None
+            self._futon_pending_since = None  # Cancel any pending entry
+            if self._futon_active:
+                if self._futon_exit_pending_since is None:
+                    self._futon_exit_pending_since = now
+                elapsed = now - self._futon_exit_pending_since
+                if elapsed >= self.config.futon_dwell_time_sec:
+                    self._futon_active = False
+                    self._futon_exit_pending_since = None
+            else:
+                self._futon_exit_pending_since = None
         # In deadband (exit_threshold <= pitch < pitch_threshold): no change
 
     def on_osc_received(self) -> None:

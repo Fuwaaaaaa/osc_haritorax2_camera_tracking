@@ -19,7 +19,7 @@ from .osc_remapper import OSCRemapper
 from .osc_sender import OSCSender
 from .profiler import PerformanceProfiler
 from .quality_meter import QualityLevel, QualityMeter
-from .state_machine import ModeConfig, TrackingMode
+from .state_machine import TrackingMode
 from .web_dashboard import WebDashboard
 
 logging.basicConfig(
@@ -102,16 +102,7 @@ def main() -> None:
         port=cfg.osc_send_port,
     )
 
-    # Apply state machine config
-    mode_config = ModeConfig(
-        visible_threshold=cfg.visible_threshold,
-        partial_threshold=cfg.partial_threshold,
-        osc_timeout_sec=cfg.osc_timeout_sec,
-        hysteresis_sec=cfg.hysteresis_sec,
-    )
-
-    engine = FusionEngine(camera=camera, receiver=receiver, sender=sender)
-    engine.state_machine.config = mode_config
+    engine = FusionEngine(camera=camera, receiver=receiver, sender=sender, config=cfg)
 
     # Optional subsystems
     tray: QualityMeter | None = None
