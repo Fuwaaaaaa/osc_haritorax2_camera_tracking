@@ -19,15 +19,8 @@
 
 ## P2 - Important
 
-### OBSオーバーレイ（WebSocketインターフェース）
-- **What:** 配信者向けにトラッキング状態をOBSに表示するWebSocketインターフェース
-- **Why:** 配信者がトラッキング品質を視聴者に見せられる。デモにも有用
-- **Pros:** 配信コミュニティへのリーチ拡大
-- **Cons:** コア機能ではない
-- **Context:** CEO Review Expansion #6。コア安定後に追加
-- **Effort:** S（CC: 20分）
-- **Priority:** P2
-- **Depends on:** Phase 4完了
+### ~~OBSオーバーレイ（WebSocketインターフェース）~~ ✅ 完了
+- **解決:** OBS Browser Source対応オーバーレイ実装（obs_overlay.py）。`--obs`フラグで有効化。http://localhost:8767 をBrowser Sourceとして追加。テスト7件。
 
 ### ~~両カメラ同時ロスト時の遷移ロジック~~ ✅ 完了
 - **解決:** 両カメラconfidence < 0.05でヒステリシスをバイパスし即座にFULL_OCCLUSIONへ遷移。テスト3件追加。
