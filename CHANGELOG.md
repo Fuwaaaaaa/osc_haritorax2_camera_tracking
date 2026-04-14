@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.2 (2026-04-14) — Hardening & Rebrand
+
+### Changed
+- **汎用IMUミドルウェア化**: HaritoraX2専用→OSC対応IMUトラッカー汎用ミドルウェアにリブランド。他トラッカー対応の道を開く
+- **main.pyリファクタ**: SubsystemManagerクラス抽出。サブシステムのstart/stopライフサイクルを統一（396→375行）
+
+### Fixed
+- **SharedMemoryバージョニング**: レイアウト変更時に旧プロセスとの不整合を防止（SHM_NAMEにバージョン番号を含める）
+- **futon_trigger_jointバリデーション**: 不正なジョイント名の設定ミスがサイレント失敗していた問題を修正（警告＋フォールバック）
+- **Config型バリデーション**: 設定ファイルの型不正値（文字列→数値等）を検出・スキップ。int/float相互変換に対応
+
 ## v0.2.1 (2026-04-14) — Per-Camera Confidence & Setup Wizard
 
 ### Added
