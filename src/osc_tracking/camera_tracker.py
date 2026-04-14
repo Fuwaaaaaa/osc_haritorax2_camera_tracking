@@ -38,7 +38,8 @@ logger = logging.getLogger(__name__)
 JOINT_COUNT = 9
 FLOATS_PER_JOINT = 7  # x, y, z, cam1_vis, cam2_vis, combined_conf, timestamp
 SHM_SIZE = JOINT_COUNT * FLOATS_PER_JOINT * 8  # float64 = 8 bytes
-SHM_NAME = "osc_tracking_camera"
+SHM_LAYOUT_VERSION = 2  # Bump when FLOATS_PER_JOINT changes
+SHM_NAME = f"osc_tracking_camera_v{SHM_LAYOUT_VERSION}"
 
 # MediaPipe Pose Landmarker index → our joint name mapping
 # https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker

@@ -59,6 +59,12 @@ class FusionEngine:
         self.receiver = receiver
         self.sender = sender
         self.config = config or TrackingConfig()
+        if self.config.futon_trigger_joint not in JOINT_NAMES:
+            logger.warning(
+                "futon_trigger_joint '%s' not in JOINT_NAMES, falling back to 'Chest'",
+                self.config.futon_trigger_joint,
+            )
+            self.config.futon_trigger_joint = "Chest"
         self.state_machine = TrackingStateMachine(config=ModeConfig(
             visible_threshold=self.config.visible_threshold,
             partial_threshold=self.config.partial_threshold,
