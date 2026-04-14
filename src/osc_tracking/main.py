@@ -92,6 +92,8 @@ def main() -> None:
     parser.add_argument("--discord", action="store_true", help="Enable Discord Rich Presence")
     parser.add_argument("--api", action="store_true", help="Enable REST API")
     parser.add_argument("--api-port", type=int, default=8766, help="REST API port")
+    parser.add_argument("--obs", action="store_true", help="Enable OBS Browser Source overlay")
+    parser.add_argument("--obs-port", type=int, default=8767, help="OBS overlay port")
     parser.add_argument("--remap", type=str, help="OSC address remap profile (vrchat/resonite/chilloutvr)")
     parser.add_argument("--bvh", type=str, help="Export BVH file to path")
     parser.add_argument(
@@ -140,7 +142,7 @@ def main() -> None:
     # Optional subsystems
     subs = SubsystemManager()
     tray = dashboard = profiler = gesture = recorder = None
-    vmc_sender = viewer = discord = api = bvh = None
+    vmc_sender = viewer = discord = api = bvh = obs_overlay = None
 
     if not args.no_tray:
         tray = QualityMeter()
@@ -173,6 +175,14 @@ def main() -> None:
         from .rest_api import RestAPI
         api = RestAPI(port=args.api_port)
         subs.add("api", api)
+    if args.obs:
+        from .obs_overlay import OBSOverlay
+        obs_overlay = OBSOverlay(
+            port=args.obs_port,
+            visible_threshold=cfg.visible_threshold,
+            partial_threshold=cfg.partial_threshold,
+        )
+        subs.add("obs", obs_overlay)
     if args.remap:
         remapper = OSCRemapper(profile_name=args.remap)
         logger.info("OSC remap profile: %s", remapper.profile.name)
@@ -216,6 +226,8 @@ def main() -> None:
         print(f"  Dashboard: http://localhost:{args.dashboard_port}")
     if vmc_sender:
         print(f"  VMC output: port {args.vmc_port}")
+    if obs_overlay:
+        print(f"  OBS overlay: http://localhost:{args.obs_port}")
     if args.remap:
         print(f"  OSC remap: {args.remap}")
     if args.record:
@@ -319,6 +331,9 @@ def main() -> None:
             if api:
                 joint_data = {name: {"conf": data[1]} for name, data in cj.items()} if cj else {}
                 api.update(mode.name, fps_now, joint_data)
+
+            if obs_overlay:
+                obs_overlay.update(mode.name, fps_now, avg_conf)
 
             # Notifications  - only on mode change
             if mode != prev_mode:
