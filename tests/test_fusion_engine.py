@@ -17,8 +17,9 @@ def mock_camera():
     camera = MagicMock()
     camera.is_alive = True
     # Return realistic joint data
+    # (position, combined_conf, cam1_conf, cam2_conf)
     camera.read_joints.return_value = {
-        name: (np.array([0.0, 1.0, 2.0]), 0.9)
+        name: (np.array([0.0, 1.0, 2.0]), 0.9, 0.9, 0.9)
         for name in JOINT_NAMES
     }
     return camera
@@ -131,11 +132,11 @@ class TestVisualCompass:
         """Visual compass should be applied to Chest joint in Visible mode."""
         # Provide elbow data for Visual Compass proxy
         mock_camera.read_joints.return_value = {
-            name: (np.array([0.1 * i, 1.0, 2.0]), 0.9)
+            name: (np.array([0.1 * i, 1.0, 2.0]), 0.9, 0.9, 0.9)
             for i, name in enumerate(JOINT_NAMES)
         }
         mock_receiver.get_bone_rotation.return_value = Rotation.from_euler(
-            "xyz", [0, 45, 0], degrees=True  # IMU says 45° yaw
+            "xyz", [0, 45, 0], degrees=True  # IMU says 45 deg yaw
         )
         engine.update()
         # Should complete without error — Visual Compass applied
@@ -185,7 +186,7 @@ class TestVisualCompassOcclusion:
         """Visual compass should be skipped when elbow joints are missing."""
         # Provide camera data but WITHOUT LeftElbow and RightElbow
         joints_no_elbows = {
-            name: (np.array([0.0, 1.0, 2.0]), 0.9)
+            name: (np.array([0.0, 1.0, 2.0]), 0.9, 0.9, 0.9)
             for name in JOINT_NAMES
             if name not in ("LeftElbow", "RightElbow")
         }
@@ -206,7 +207,7 @@ class TestConvergence:
         """After 30 frames, the fused position should converge toward camera target."""
         target = np.array([1.0, 2.0, 3.0])
         mock_camera.read_joints.return_value = {
-            name: (target.copy(), 0.95) for name in JOINT_NAMES
+            name: (target.copy(), 0.95, 0.95, 0.95) for name in JOINT_NAMES
         }
 
         for _ in range(30):
@@ -223,8 +224,8 @@ class TestPartialCameraData:
     def test_partial_camera_data(self, engine, mock_camera, mock_sender):
         """Engine handles partial camera data (only some joints present)."""
         partial_joints = {
-            "Hips": (np.array([0.0, 1.0, 2.0]), 0.9),
-            "Chest": (np.array([0.0, 1.5, 2.0]), 0.85),
+            "Hips": (np.array([0.0, 1.0, 2.0]), 0.9, 0.9, 0.9),
+            "Chest": (np.array([0.0, 1.5, 2.0]), 0.85, 0.85, 0.85),
         }
         mock_camera.read_joints.return_value = partial_joints
 
@@ -242,6 +243,62 @@ class TestPartialCameraData:
         left_foot = next(o for o in outputs if o.joint_name == "LeftFoot")
         assert left_foot.position is not None
         assert left_foot.rotation is not None
+
+
+class TestPerCameraConfidence:
+    """Test that per-camera confidence enables SINGLE_CAM_DEGRADED mode."""
+
+    def test_asymmetric_confidence_triggers_degraded(
+        self, mock_camera, mock_receiver, mock_sender
+    ):
+        """When cam1 is high and cam2 is low, SINGLE_CAM_DEGRADED should trigger."""
+        engine = FusionEngine(
+            camera=mock_camera, receiver=mock_receiver, sender=mock_sender,
+        )
+        engine.state_machine.config.hysteresis_sec = 0.0
+        engine.state_machine._last_osc_time = time.monotonic()
+
+        # cam1 sees well (0.9), cam2 is occluded (0.1)
+        mock_camera.read_joints.return_value = {
+            name: (np.array([0.0, 1.0, 2.0]), 0.5, 0.9, 0.1)
+            for name in JOINT_NAMES
+        }
+        mode = engine.update()
+        assert mode == TrackingMode.SINGLE_CAM_DEGRADED
+
+    def test_symmetric_confidence_stays_visible(
+        self, mock_camera, mock_receiver, mock_sender
+    ):
+        """When both cameras have similar confidence, should NOT be degraded."""
+        engine = FusionEngine(
+            camera=mock_camera, receiver=mock_receiver, sender=mock_sender,
+        )
+        engine.state_machine.config.hysteresis_sec = 0.0
+        engine.state_machine._last_osc_time = time.monotonic()
+
+        mock_camera.read_joints.return_value = {
+            name: (np.array([0.0, 1.0, 2.0]), 0.9, 0.9, 0.85)
+            for name in JOINT_NAMES
+        }
+        mode = engine.update()
+        assert mode == TrackingMode.VISIBLE
+
+    def test_both_cameras_low_is_full_occlusion(
+        self, mock_camera, mock_receiver, mock_sender
+    ):
+        """When both cameras are low, should be FULL_OCCLUSION not DEGRADED."""
+        engine = FusionEngine(
+            camera=mock_camera, receiver=mock_receiver, sender=mock_sender,
+        )
+        engine.state_machine.config.hysteresis_sec = 0.0
+        engine.state_machine._last_osc_time = time.monotonic()
+
+        mock_camera.read_joints.return_value = {
+            name: (np.array([0.0, 1.0, 2.0]), 0.05, 0.02, 0.03)
+            for name in JOINT_NAMES
+        }
+        mode = engine.update()
+        assert mode == TrackingMode.FULL_OCCLUSION
 
 
 class TestCompassBlendFactorThreading:

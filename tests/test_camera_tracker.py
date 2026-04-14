@@ -1,4 +1,4 @@
-"""Tests for camera_tracker.py — SharedMemory, lifecycle, data handling."""
+"""Tests for camera_tracker.py — SharedMemory, per-camera confidence, lifecycle."""
 
 import time
 from multiprocessing import shared_memory
@@ -24,7 +24,8 @@ class TestConstants:
         assert JOINT_COUNT == 9
 
     def test_floats_per_joint(self):
-        assert FLOATS_PER_JOINT == 5  # x, y, z, confidence, timestamp
+        # x, y, z, cam1_vis, cam2_vis, combined_conf, timestamp
+        assert FLOATS_PER_JOINT == 7
 
     def test_shm_size(self):
         assert SHM_SIZE == JOINT_COUNT * FLOATS_PER_JOINT * 8
@@ -47,12 +48,11 @@ class TestCameraConfig:
         assert cfg.target_fps == 60
 
 
-class TestSharedMemoryReadWrite:
-    """Test read_joints() with real shared memory segments."""
+class TestPerCameraConfidence:
+    """Test that read_joints returns per-camera confidence values."""
 
     @pytest.fixture
     def tracker_with_shm(self):
-        """Create a CameraTracker with a real shared memory buffer (no subprocess)."""
         tracker = CameraTracker()
         shm_name = f"test_osc_cam_{id(tracker)}"
         shm = shared_memory.SharedMemory(name=shm_name, create=True, size=SHM_SIZE)
@@ -65,23 +65,48 @@ class TestSharedMemoryReadWrite:
         except FileNotFoundError:
             pass
 
-    def test_read_valid_data(self, tracker_with_shm):
-        """Write valid joint data and verify read_joints() returns it."""
+    def test_read_returns_per_camera_confidence(self, tracker_with_shm):
+        """read_joints should return (position, combined_conf, cam1_conf, cam2_conf)."""
         tracker, shm = tracker_with_shm
         buf = np.ndarray(
             (JOINT_COUNT, FLOATS_PER_JOINT), dtype=np.float64, buffer=shm.buf
         )
         now = time.monotonic()
         for i in range(JOINT_COUNT):
-            buf[i] = [1.0 + i, 2.0 + i, 3.0 + i, 0.9, now]
+            # x, y, z, cam1_vis, cam2_vis, combined, timestamp
+            buf[i] = [1.0, 2.0, 3.0, 0.9, 0.7, 0.8, now]
 
         result = tracker.read_joints()
         assert result is not None
         assert len(result) > 0
-        for name, (pos, conf) in result.items():
-            assert name in JOINT_NAMES
+        for name, data in result.items():
+            assert len(data) == 4  # (pos, combined, cam1, cam2)
+            pos, combined, cam1, cam2 = data
             assert np.all(np.isfinite(pos))
-            assert 0.0 <= conf <= 1.0
+            assert cam1 == pytest.approx(0.9)
+            assert cam2 == pytest.approx(0.7)
+            assert combined == pytest.approx(0.8)
+
+    def test_asymmetric_camera_confidence(self, tracker_with_shm):
+        """Different cam1/cam2 confidence should be preserved."""
+        tracker, shm = tracker_with_shm
+        buf = np.ndarray(
+            (JOINT_COUNT, FLOATS_PER_JOINT), dtype=np.float64, buffer=shm.buf
+        )
+        now = time.monotonic()
+        # Camera 1 sees well, camera 2 is occluded
+        buf[0] = [1.0, 2.0, 3.0, 0.95, 0.1, 0.525, now]
+        # Rest are zero/stale
+        for i in range(1, JOINT_COUNT):
+            buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+        result = tracker.read_joints()
+        assert result is not None
+        joint_name = JOINT_NAMES[0]
+        assert joint_name in result
+        _, _, cam1, cam2 = result[joint_name]
+        assert cam1 == pytest.approx(0.95)
+        assert cam2 == pytest.approx(0.1)
 
     def test_stale_data_filtered(self, tracker_with_shm):
         """Data older than 0.5s should be filtered out."""
@@ -89,13 +114,13 @@ class TestSharedMemoryReadWrite:
         buf = np.ndarray(
             (JOINT_COUNT, FLOATS_PER_JOINT), dtype=np.float64, buffer=shm.buf
         )
-        old_time = time.monotonic() - 1.0  # 1 second old
+        old_time = time.monotonic() - 1.0
         for i in range(JOINT_COUNT):
-            buf[i] = [1.0, 2.0, 3.0, 0.9, old_time]
+            buf[i] = [1.0, 2.0, 3.0, 0.9, 0.9, 0.9, old_time]
 
         result = tracker.read_joints()
         assert result is not None
-        assert len(result) == 0  # All stale, all filtered
+        assert len(result) == 0
 
     def test_nan_data_filtered(self, tracker_with_shm):
         """NaN position values should be filtered out."""
@@ -105,11 +130,11 @@ class TestSharedMemoryReadWrite:
         )
         now = time.monotonic()
         for i in range(JOINT_COUNT):
-            buf[i] = [float("nan"), 2.0, 3.0, 0.9, now]
+            buf[i] = [float("nan"), 2.0, 3.0, 0.9, 0.9, 0.9, now]
 
         result = tracker.read_joints()
         assert result is not None
-        assert len(result) == 0  # All NaN, all filtered
+        assert len(result) == 0
 
     def test_mixed_valid_and_invalid(self, tracker_with_shm):
         """Some valid, some stale, some NaN — only valid returned."""
@@ -119,14 +144,14 @@ class TestSharedMemoryReadWrite:
         )
         now = time.monotonic()
         # Joint 0: valid
-        buf[0] = [1.0, 2.0, 3.0, 0.9, now]
+        buf[0] = [1.0, 2.0, 3.0, 0.9, 0.9, 0.9, now]
         # Joint 1: stale
-        buf[1] = [1.0, 2.0, 3.0, 0.9, now - 1.0]
+        buf[1] = [1.0, 2.0, 3.0, 0.9, 0.9, 0.9, now - 1.0]
         # Joint 2: NaN
-        buf[2] = [float("nan"), 2.0, 3.0, 0.9, now]
+        buf[2] = [float("nan"), 2.0, 3.0, 0.9, 0.9, 0.9, now]
         # Rest: zero (will have stale timestamp 0)
         for i in range(3, JOINT_COUNT):
-            buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0]
+            buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
         result = tracker.read_joints()
         assert result is not None
@@ -219,15 +244,15 @@ class TestTornRead:
             (JOINT_COUNT, FLOATS_PER_JOINT), dtype=np.float64, buffer=shm.buf
         )
         now = time.monotonic()
-        buf[0] = [1.0, 2.0, 3.0, 0.9, now]
+        buf[0] = [1.0, 2.0, 3.0, 0.9, 0.9, 0.9, now]
 
         result = tracker.read_joints()
         assert result is not None
 
         # Mutate shared memory after read
-        buf[0] = [99.0, 99.0, 99.0, 0.1, now]
+        buf[0] = [99.0, 99.0, 99.0, 0.1, 0.1, 0.1, now]
 
         # Original result should not change
         if JOINT_NAMES[0] in result:
-            pos, _ = result[JOINT_NAMES[0]]
+            pos, _, _, _ = result[JOINT_NAMES[0]]
             assert pos[0] == pytest.approx(1.0)
