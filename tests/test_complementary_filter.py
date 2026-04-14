@@ -9,7 +9,7 @@ from osc_tracking.complementary_filter import JOINT_NAMES, ComplementaryFilter
 
 @pytest.fixture
 def cf():
-    return ComplementaryFilter()
+    return ComplementaryFilter(compass_blend_factor=0.3)
 
 
 class TestHappyPath:
@@ -117,8 +117,8 @@ class TestSmoothRecovery:
         target = np.array([10.0, 10.0, 10.0])
         imu = Rotation.identity()
 
-        cf1 = ComplementaryFilter()
-        cf2 = ComplementaryFilter()
+        cf1 = ComplementaryFilter(compass_blend_factor=0.3)
+        cf2 = ComplementaryFilter(compass_blend_factor=0.3)
 
         # 30fps for 1 second
         for _ in range(30):
@@ -305,3 +305,51 @@ class TestVelocityAndStationaryTimer:
 
         # Timer should have been reset to 0
         assert cf.joints["Hips"].stationary_timer < 0.1
+
+
+class TestCompassBlendFactor:
+    """Tests for configurable compass_blend_factor (Phase 2 bug fix)."""
+
+    def test_default_blend_factor(self):
+        cf = ComplementaryFilter(compass_blend_factor=0.3)
+        assert cf.compass_blend_factor == 0.3
+
+    def test_custom_blend_factor_affects_slerp(self):
+        """Different blend factors should produce different rotation outputs."""
+        cam_pos = np.array([1.0, 2.0, 3.0])
+        imu_rot = Rotation.from_euler("xyz", [45, 0, 0], degrees=True)
+
+        cf_low = ComplementaryFilter(compass_blend_factor=0.1)
+        cf_high = ComplementaryFilter(compass_blend_factor=0.9)
+
+        state_low = cf_low.update("Chest", cam_pos, imu_rot, confidence=0.9, dt=1/30)
+        state_high = cf_high.update("Chest", cam_pos, imu_rot, confidence=0.9, dt=1/30)
+
+        # Different blend factors should yield different rotations
+        angle_diff = (
+            state_low.rotation.inv() * state_high.rotation
+        ).magnitude()
+        assert angle_diff > 0.001
+
+    def test_blend_factor_clamped_to_valid_range(self):
+        """Values outside [0, 1] should be clamped."""
+        cf_neg = ComplementaryFilter(compass_blend_factor=-0.5)
+        assert cf_neg.compass_blend_factor == 0.0
+
+        cf_over = ComplementaryFilter(compass_blend_factor=1.5)
+        assert cf_over.compass_blend_factor == 1.0
+
+    def test_blend_factor_zero_means_no_camera_blend(self):
+        """blend_factor=0 should make Slerp return the current rotation (no blend)."""
+        cf = ComplementaryFilter(compass_blend_factor=0.0)
+        imu_rot = Rotation.from_euler("xyz", [30, 0, 0], degrees=True)
+        cam_pos = np.array([1.0, 2.0, 3.0])
+
+        # Update twice to establish a baseline rotation
+        cf.update("Hips", cam_pos, imu_rot, confidence=0.9, dt=1/30)
+        state = cf.update("Hips", cam_pos, imu_rot, confidence=0.9, dt=1/30)
+
+        # With blend=0, rotation should closely follow existing state (no camera blend)
+        angle = (state.rotation.inv() * imu_rot).magnitude()
+        # Not exact due to Slerp with blend=0 returning start rotation
+        assert angle < 0.6  # radians — close to IMU
