@@ -20,6 +20,21 @@
 
 ## テストシナリオ
 
+### 0. ベンチマーク（アーキテクチャ判定）
+- [ ] `python -m osc_tracking.tools.benchmark --cam1 0 --cam2 1 --duration 60` を実行
+- [ ] p99レイテンシが表示されること
+- [ ] 判定結果: PASS (p99 < 40ms) / WARN (40-50ms) / FAIL (> 50ms)
+- [ ] FAILの場合: ONNX Runtime移行またはシングルカメラモードを検討
+
+### 0.5. セットアップウィザード
+- [ ] `python -m osc_tracking.tools.setup_wizard` を実行
+- [ ] Step 1: MediaPipeモデル検出またはダウンロードが成功すること
+- [ ] Step 2: 2台のカメラが「OK」と表示されること
+- [ ] Step 3: SlimeVR OSC接続が確認できること
+- [ ] Step 4: ポート確認が完了すること
+- [ ] Step 5-7: キャリブ→テスト→設定保存が完了すること
+- [ ] 最終サマリーで7/7ステップ成功と表示されること
+
 ### 1. カメラキャリブレーション
 - [ ] `python -m osc_tracking.tools.calibrate` を実行
 - [ ] チェッカーボード（印刷済み）を両カメラ視野で複数角度から撮影
@@ -62,10 +77,12 @@
 - [ ] ステータスが `[VISIBLE]` に復帰すること
 - [ ] 復帰時のスムーズリシンク（ジャンプしないこと）
 
-### 7. 片カメラ劣化
+### 7. 片カメラ劣化（カメラ別confidence検証）
 - [ ] 片方のカメラを手で覆う
 - [ ] ステータスが `[SINGLE_CAM_DEGRADED]` に遷移すること
+- [ ] ダッシュボードで片側のカメラ信頼度のみが低下していること
 - [ ] カメラを戻すと `[VISIBLE]` に復帰すること
+- [ ] 逆のカメラを覆っても同様に検出されること
 
 ### 8. 布団モード（FUTON_MODE）
 - [ ] 寝転がる（ピッチ角>60度を500ms維持）
@@ -95,16 +112,18 @@
 
 | # | シナリオ | 結果 | 備考 |
 |---|---------|------|------|
+| 0 | ベンチマーク | PASS/WARN/FAIL | p99: ___ms |
+| 0.5 | セットアップウィザード | PASS/FAIL | ___/7ステップ |
 | 1 | キャリブレーション | PASS/FAIL | |
 | 2 | カメラプレビュー | PASS/FAIL | |
-| 3 | VISIBLE mode | PASS/FAIL | |
+| 3 | VISIBLE mode | PASS/FAIL | FPS: ___ |
 | 4 | Partial Occlusion | PASS/FAIL | |
 | 5 | Full Occlusion + ドリフト補正 | PASS/FAIL | |
 | 6 | IMU切断/再接続 | PASS/FAIL | |
-| 7 | 片カメラ劣化 | PASS/FAIL | |
+| 7 | 片カメラ劣化 + カメラ別confidence | PASS/FAIL | |
 | 8 | 布団モード（FUTON_MODE） | PASS/FAIL | |
 | 9 | 両カメラ同時ロスト | PASS/FAIL | |
 | 10 | 30分安定性 | PASS/FAIL | |
 | 11 | VRChat出力 | PASS/FAIL | |
 
-**リリース基準: シナリオ1-9がPASS（10, 11はベストエフォート）**
+**リリース基準: シナリオ0, 1-9がPASS（0.5, 10, 11はベストエフォート）**
