@@ -59,3 +59,43 @@ class TestSaveLoad:
         path.write_text("not valid json {{{")
         cfg = TrackingConfig.load(path)
         assert cfg.cam1_index == 0
+
+
+class TestTypeValidation:
+    """Config load rejects wrong types and coerces int/float."""
+
+    def test_string_for_float_rejected(self, tmp_path):
+        """String value for a float field should be skipped."""
+        path = tmp_path / "bad_type.json"
+        path.write_text('{"visible_threshold": "high"}')
+        cfg = TrackingConfig.load(path)
+        assert cfg.visible_threshold == 0.7  # Default kept
+
+    def test_string_for_int_rejected(self, tmp_path):
+        path = tmp_path / "bad_type.json"
+        path.write_text('{"cam1_index": "zero"}')
+        cfg = TrackingConfig.load(path)
+        assert cfg.cam1_index == 0
+
+    def test_int_coerced_to_float(self, tmp_path):
+        """JSON integer for a float field should be coerced."""
+        path = tmp_path / "coerce.json"
+        path.write_text('{"visible_threshold": 1}')
+        cfg = TrackingConfig.load(path)
+        assert cfg.visible_threshold == 1.0
+        assert isinstance(cfg.visible_threshold, float)
+
+    def test_float_coerced_to_int(self, tmp_path):
+        """JSON float for an int field should be coerced."""
+        path = tmp_path / "coerce.json"
+        path.write_text('{"target_fps": 60.0}')
+        cfg = TrackingConfig.load(path)
+        assert cfg.target_fps == 60
+        assert isinstance(cfg.target_fps, int)
+
+    def test_unknown_key_ignored(self, tmp_path):
+        path = tmp_path / "extra.json"
+        path.write_text('{"nonexistent_key": 42, "cam1_index": 3}')
+        cfg = TrackingConfig.load(path)
+        assert cfg.cam1_index == 3
+        assert not hasattr(cfg, "nonexistent_key")

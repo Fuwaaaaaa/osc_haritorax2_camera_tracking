@@ -92,13 +92,24 @@ class TrackingConfig:
 
 
 def _apply_json(config: TrackingConfig, path: Path) -> None:
-    """Apply JSON file values to config object."""
+    """Apply JSON file values to config object, with type validation."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         for key, value in data.items():
-            if hasattr(config, key):
-                if key == "camera_resolution":
-                    value = tuple(value)
-                setattr(config, key, value)
+            if not hasattr(config, key):
+                continue
+            if key == "camera_resolution":
+                value = tuple(value)
+            # Validate type matches the default
+            expected = type(getattr(config, key))
+            if expected in (int, float) and isinstance(value, (int, float)):
+                value = expected(value)  # int/float coercion
+            elif not isinstance(value, expected):
+                logger.warning(
+                    "Config %s: '%s' expected %s, got %s — skipping",
+                    path, key, expected.__name__, type(value).__name__,
+                )
+                continue
+            setattr(config, key, value)
     except (json.JSONDecodeError, OSError) as e:
         logger.warning("Failed to load config %s: %s", path, e)
