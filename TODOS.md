@@ -23,19 +23,11 @@
 ### ~~両カメラ同時ロスト時の遷移ロジック~~ ✅ 完了
 - **解決:** 両カメラconfidence < 0.05でヒステリシスをバイパスし即座にFULL_OCCLUSIONへ遷移。テスト3件追加。
 
-### セットアップウィザード（in-app）
-- **What:** 初回使用時の7ステップ（SlimeTora→SlimeVR→カメラ配置→キャリブ→起動）をガイドするウィザード
-- **Why:** 現在はQUICKSTART.mdのみ。初心者にはハードルが高い
-- **Effort:** M（CC: 30分）
-- **Priority:** P2
-- **Depends on:** コア機能安定後
+### ~~セットアップウィザード（in-app）~~ ✅ 完了
+- **解決:** 7ステップCLIウィザード実装（setup_wizard.py）。モデルDL→カメラ確認→SlimeVR接続→ポート確認→キャリブ→テスト→設定保存。テスト10件。
 
-### 統一品質閾値テーブル
-- **What:** quality_meter、web_dashboard、state_machineで使う信頼度閾値を1つのテーブルに統一
-- **Why:** 現在 0.7/0.3 がコード内にハードコード散在。変更漏れのリスク
-- **Effort:** S（CC: 15分）
-- **Priority:** P2
-- **Context:** Design Reviewで指摘
+### ~~統一品質閾値テーブル~~ ✅ 完了
+- **解決:** ComplementaryFilter/web_dashboard/preview.pyのハードコード0.7/0.3をconfig値に置換。閾値はconfig.pyで一元管理。
 
 ### ~~残りモジュール統合（vmc_sender, hotkeys等）~~ ✅ 完了
 - **解決:** 全17モジュールをmain.pyに統合済み。CLIフラグ（--vmc, --viewer, --discord, --api, --remap, --bvh, --smoothing等）で有効化。

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.1 (2026-04-14) — Per-Camera Confidence & Setup Wizard
+
+### Added
+- **カメラ別confidence分離**: SharedMemoryレイアウトを拡張し、カメラ別の信頼度をステートマシンに渡すように。SINGLE_CAM_DEGRADEDモードが正しく動作
+- **セットアップウィザード**: `python -m osc_tracking.tools.setup_wizard` — 初回セットアップを7ステップでガイド（モデルDL→カメラ確認→SlimeVR接続→ポート確認→キャリブ→テスト→設定保存）
+- **camera_tracker.pyテスト**: SharedMemory読み書き、カメラ別confidence、失効・NaNフィルタ、ライフサイクル（13テスト）
+- **fusion_engineカメラ別confidenceテスト**: SINGLE_CAM_DEGRADED/VISIBLE/FULL_OCCLUSION判定（3テスト）
+
+### Changed
+- **統一品質閾値**: ComplementaryFilter/web_dashboard/preview.pyのハードコード0.7/0.3を設定値に置換。閾値変更時の変更漏れを防止
+- SharedMemoryレイアウトを5→7 floats/joint（cam1_vis, cam2_vis追加）
+
 ## v0.1.0 (2026-04-08) — Initial Release
 
 HaritoraX2 + デュアルWebカメラのセンサーフュージョンによるVRフルボディトラッキングシステム初版。
