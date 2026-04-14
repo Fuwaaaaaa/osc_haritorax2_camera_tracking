@@ -10,7 +10,7 @@ HaritoraX2 + デュアルWebカメラのセンサーフュージョンによるV
 ## Architecture
 - 2プロセス構成: カメラサブプロセス(MediaPipe) + メインプロセス(フュージョン+OSC)
 - 相補フィルタ（MEKF不使用）
-- 5モードステートマシン
+- 6モードステートマシン
 - HaritoraX2はBLE/Serial通信（OSCではない）。SlimeTora→SlimeVR Server→OSC経由で接続
 
 ## Testing

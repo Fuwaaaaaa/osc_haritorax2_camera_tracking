@@ -8,11 +8,11 @@
 - **camera_tracker.py テスト**: SharedMemory読み書き、失効データフィルタ、NaNハンドリング、ライフサイクル、トーンリード検出 (17テスト)
 
 ### Fixed
-- **compass_blend_factor バグ**: config値がComplementaryFilter/VisualCompassに渡されずハードコード0.3だった問題を修正。configからFusionEngine経由で正しくスレッディング
-- **FUTON_MODE enum未登録**: main.py、simulate.py、web_dashboard.pyのMODE_COLORSにFUTON_MODEを追加 (KeyError防止)
-- **config伝搬バグ**: main.pyがFusionEngineにconfigを渡さず、futon閾値・compass_blend_factor等がデフォルト値で固定されていた問題を修正
-- **FUTON_MODE exit フリッカー**: 退場時にもドウェルタイムを適用し、一瞬のピッチ変動によるモードフリッカーを防止
-- **VERSION形式不整合**: VERSION(4パート)とpyproject.toml(3パート)の不整合を修正
+- **compass_blend_factor設定が反映されない問題**: config.jsonで設定した値がフィルタに渡されずハードコード0.3で動作していた問題を修正。設定どおりのブレンド比率で動作するように
+- **FUTON_MODE表示エラー**: ダッシュボード・シミュレーション・メインUIでFUTON_MODEのカラー表示が未登録だった問題を修正
+- **config設定がデフォルト値で固定される問題**: futon閾値・compass_blend_factor等のconfig設定がFusionEngineに渡されていなかった問題を修正。設定ファイルの値が正しく反映されるように
+- **FUTON_MODE退場時のフリッカー**: 退場時にもドウェルタイムを適用し、一瞬のピッチ変動によるモードフリッカーを防止
+- **VERSION形式不整合**: VERSIONファイルとpyproject.tomlのバージョン形式を統一
 
 ### Changed
 - ステートマシンを5モードから6モードに拡張
