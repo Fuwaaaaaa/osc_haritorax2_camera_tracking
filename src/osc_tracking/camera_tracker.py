@@ -64,6 +64,37 @@ MODEL_PATH_DEFAULT = "models/pose_landmarker_heavy.task"
 MODEL_PATH_LITE = "models/pose_landmarker_lite.task"
 
 
+def _next_monotonic_ms(prev_ms: int) -> int:
+    """Return a strictly-increasing millisecond timestamp for MediaPipe VIDEO mode.
+
+    MediaPipe rejects non-monotonic frame timestamps. Using wall-clock time
+    tracks frame drops accurately (the previous ``prev_ms += 1000 / fps``
+    pattern lied to MP when FPS dipped). If two frames resolve to the same
+    millisecond we force a +1 bump.
+    """
+    now_ms = int(time.monotonic() * 1000.0)
+    if now_ms <= prev_ms:
+        return prev_ms + 1
+    return now_ms
+
+
+_shm_name_counter = 0
+
+
+def _unique_shm_name() -> str:
+    """Return a fresh shared-memory name that won't collide with a leaked
+    SHM from a previously crashed instance. The PID-only scheme used before
+    re-bound to stale buffers after a hard exit; a process-local counter
+    ensures back-to-back calls also differ (``time.monotonic_ns`` resolution
+    is low enough on Windows that consecutive calls can tie)."""
+    global _shm_name_counter
+    _shm_name_counter += 1
+    return (
+        f"{SHM_NAME}_{mp.current_process().pid}"
+        f"_{time.monotonic_ns()}_{_shm_name_counter}"
+    )
+
+
 @dataclass
 class CameraConfig:
     """Configuration for the dual camera setup."""
@@ -91,13 +122,27 @@ class CameraTracker:
         if self._process and self._process.is_alive():
             return
 
-        self._shm_name = f"{SHM_NAME}_{mp.current_process().pid}"
-        try:
-            self._shm = shared_memory.SharedMemory(
-                name=self._shm_name, create=True, size=SHM_SIZE
-            )
-        except FileExistsError:
-            self._shm = shared_memory.SharedMemory(name=self._shm_name, create=False)
+        # Retry with a fresh name on the unlikely event of collision.
+        # Never reuse an existing SHM (create=False) — on a POSIX crash it
+        # can hold stale joint data; on Windows the size may not even match.
+        last_err: FileExistsError | None = None
+        self._shm = None
+        for _ in range(8):
+            candidate = _unique_shm_name()
+            try:
+                self._shm = shared_memory.SharedMemory(
+                    name=candidate, create=True, size=SHM_SIZE
+                )
+                self._shm_name = candidate
+                break
+            except FileExistsError as e:
+                last_err = e
+                logger.warning("SHM name %s already in use, retrying", candidate)
+                continue
+        if self._shm is None:
+            raise RuntimeError(
+                "Could not allocate a unique shared-memory name"
+            ) from last_err
 
         self._running.set()
         self._process = mp.Process(
@@ -274,7 +319,7 @@ def _camera_worker(
 
         consecutive_failures = 0
         now = time.monotonic()
-        frame_ts_ms += int(1000 / config.target_fps)
+        frame_ts_ms = _next_monotonic_ms(frame_ts_ms)
 
         if pose1 is not None and pose2 is not None:
             try:
