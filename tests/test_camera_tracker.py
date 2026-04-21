@@ -10,9 +10,12 @@ import pytest
 from osc_tracking.camera_tracker import (
     FLOATS_PER_JOINT,
     JOINT_COUNT,
+    SHM_NAME,
     SHM_SIZE,
     CameraConfig,
     CameraTracker,
+    _next_monotonic_ms,
+    _unique_shm_name,
 )
 from osc_tracking.complementary_filter import JOINT_NAMES
 
@@ -211,6 +214,106 @@ class TestLifecycle:
     def test_is_alive_without_start(self):
         tracker = CameraTracker()
         assert tracker.is_alive is False
+
+
+class TestMonotonicTimestamp:
+    """_next_monotonic_ms guarantees strictly increasing ms values.
+
+    MediaPipe VIDEO mode rejects non-monotonic timestamps, so the helper
+    must bump past the previous frame even when a second frame arrives
+    inside the same millisecond."""
+
+    def test_advances_past_previous(self):
+        prev = 1000
+        ts = _next_monotonic_ms(prev)
+        assert ts > prev
+
+    def test_monotonic_under_same_ms(self, monkeypatch):
+        """If two frames resolve to the same ms, the helper still advances."""
+        monkeypatch.setattr(time, "monotonic", lambda: 1.000)
+        a = _next_monotonic_ms(0)
+        b = _next_monotonic_ms(a)
+        assert b > a
+
+    def test_tracks_wallclock_when_possible(self, monkeypatch):
+        """When real time has advanced, use that (not a forced +1)."""
+        monkeypatch.setattr(time, "monotonic", lambda: 5.500)
+        ts = _next_monotonic_ms(100)
+        assert ts >= 5500
+
+
+class TestUniqueShmName:
+    """_unique_shm_name makes names collision-resistant even if the old
+    SHM-name format (PID only) would reuse stale state from a crashed process."""
+
+    def test_includes_prefix(self):
+        name = _unique_shm_name()
+        assert name.startswith(SHM_NAME)
+
+    def test_distinct_per_call(self):
+        a = _unique_shm_name()
+        b = _unique_shm_name()
+        assert a != b
+
+
+class TestStartCleansStaleShm:
+    """start() must not bind to a leaked-from-previous-crash SHM.
+
+    On POSIX, unlinking a stale SHM works but the shared buffer could still
+    hold data from the crashed process if we naively ``create=False``. On
+    Windows, the name remains bound until every open handle closes, so the
+    only safe recourse on collision is to pick a fresh name. Either way,
+    the tracker must never reuse an existing SHM it didn't create.
+    """
+
+    @patch("osc_tracking.camera_tracker.mp.Process")
+    def test_start_picks_fresh_name_on_collision(
+        self, mock_proc_cls, monkeypatch
+    ):
+        """When the first chosen name collides, start() retries and gets a
+        different, freshly-created SHM — never the pre-existing one."""
+        from osc_tracking import camera_tracker
+
+        colliding_name = f"{SHM_NAME}_collision_{int(time.time_ns())}"
+
+        names = iter([colliding_name, f"{colliding_name}_fresh"])
+        monkeypatch.setattr(camera_tracker, "_unique_shm_name", lambda: next(names))
+
+        leaked = shared_memory.SharedMemory(
+            name=colliding_name, create=True, size=SHM_SIZE
+        )
+        try:
+            buf = np.ndarray(
+                (JOINT_COUNT, FLOATS_PER_JOINT),
+                dtype=np.float64,
+                buffer=leaked.buf,
+            )
+            buf.fill(-999.0)
+
+            mock_proc = MagicMock()
+            mock_proc.is_alive.return_value = False
+            mock_proc_cls.return_value = mock_proc
+
+            tracker = CameraTracker()
+            try:
+                tracker.start()
+                assert tracker._shm is not None
+                # Retry must have picked the second name, not rebound the leak.
+                assert tracker._shm_name != colliding_name
+                fresh = np.ndarray(
+                    (JOINT_COUNT, FLOATS_PER_JOINT),
+                    dtype=np.float64,
+                    buffer=tracker._shm.buf,
+                )
+                assert not np.any(fresh == -999.0)
+            finally:
+                tracker.stop()
+        finally:
+            try:
+                leaked.close()
+                leaked.unlink()
+            except FileNotFoundError:
+                pass
 
 
 class TestTornRead:
