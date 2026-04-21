@@ -1,10 +1,15 @@
 """Notification system — alerts for tracking issues.
 
-Shows Windows toast notifications and plays sounds for:
+Plays sounds and a system beep for:
 - IMU disconnection / reconnection
 - Camera lost / recovered
 - Calibration drift detected
 - Low FPS warning
+
+Note: ``popup_enabled`` currently maps to a Windows ``MessageBeep`` — no
+visual toast is shown. A future change may wire this to ``winotify`` or
+``win10toast`` if optional-deps support is added. Callers should treat
+popups as audible-only today.
 """
 
 import logging
@@ -87,7 +92,11 @@ class NotificationManager:
         threading.Thread(target=winsound.Beep, args=(freq, duration), daemon=True).start()  # type: ignore[attr-defined]
 
     def _show_popup(self, message: str, level: str) -> None:
-        """Show a Windows toast notification (best-effort)."""
+        """Audible system notification (beep only — no toast UI today).
+
+        Historically named ``popup`` and slated for a real toast via
+        ``winotify``/``win10toast`` as an optional dep. See module docstring.
+        """
         try:
             from ctypes import windll  # type: ignore[attr-defined]
             windll.user32.MessageBeep(0)  # System notification sound
