@@ -99,3 +99,18 @@ class TestTypeValidation:
         cfg = TrackingConfig.load(path)
         assert cfg.cam1_index == 3
         assert not hasattr(cfg, "nonexistent_key")
+
+    def test_unknown_key_logs_warning(self, tmp_path, caplog):
+        """Unknown keys in user.json (usually a stale rename) should warn,
+        not silently disappear."""
+        import logging
+
+        path = tmp_path / "extra.json"
+        path.write_text('{"renamed_old_key": 42, "cam1_index": 3}')
+
+        with caplog.at_level(logging.WARNING, logger="osc_tracking.config"):
+            TrackingConfig.load(path)
+
+        assert any(
+            "renamed_old_key" in rec.message for rec in caplog.records
+        ), caplog.text

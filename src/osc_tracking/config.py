@@ -97,6 +97,11 @@ def _apply_json(config: TrackingConfig, path: Path) -> None:
         data = json.loads(path.read_text(encoding="utf-8"))
         for key, value in data.items():
             if not hasattr(config, key):
+                # Usually a stale key after a config rename — surface it
+                # so users notice their setting is being silently dropped.
+                logger.warning(
+                    "Config %s: unknown key '%s' — ignored", path, key
+                )
                 continue
             if key == "camera_resolution":
                 value = tuple(value)
