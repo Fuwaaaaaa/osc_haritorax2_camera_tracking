@@ -44,4 +44,7 @@ jobs:
         run: pytest --tb=short -q
       - name: Coverage
         if: matrix.python-version == '3.12'
-        run: pytest --cov=osc_tracking --cov-report=term-missing --cov-fail-under=20
+        # Ratchet: guards against regression from the current ~27% total.
+        # Raise alongside adding tests for currently-untested modules
+        # (gesture_detector, motion_smoothing, recorder, simulator, ...).
+        run: pytest --cov=osc_tracking --cov-report=term-missing --cov-fail-under=25
