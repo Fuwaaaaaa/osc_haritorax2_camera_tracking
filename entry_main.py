@@ -2,7 +2,9 @@
 import os
 import sys
 
-# Add src to path so osc_tracking package is importable
+# Add src to path so osc_tracking package is importable.
+# Dev: <repo>/src. Frozen: _MEIPASS holds the bundled package; sys.executable's
+# parent holds user-editable config/ (see build_exe.copy_config_to_dist).
 if getattr(sys, 'frozen', False):
     base = sys._MEIPASS
 else:
