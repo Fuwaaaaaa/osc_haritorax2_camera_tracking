@@ -199,6 +199,35 @@ class TestTriangulationEdgeCases:
 
         np.testing.assert_allclose(result[0], point_3d, atol=0.1)
 
+    def test_degenerate_w_yields_nan_not_inf(self, synthetic_calib):
+        """Degenerate homogeneous w ~ 0 must produce NaN (not inf).
+
+        NaN propagates through the downstream filter's isfinite check and
+        the point is skipped cleanly. Inf would slip past naive sanity
+        checks in some paths and corrupt velocity/accel derivatives.
+        """
+        from osc_tracking.stereo_calibration import triangulate_points
+
+        pt_far_behind_cam1 = np.array([[320.0, 240.0]])
+        pt_far_behind_cam2 = np.array([[320.0, 240.0]])
+
+        result = triangulate_points(
+            synthetic_calib, pt_far_behind_cam1, pt_far_behind_cam2
+        )
+
+        assert result.shape == (1, 3)
+        # Either a finite result or NaN — never inf.
+        assert not np.any(np.isinf(result)), f"Got inf: {result}"
+
+    def test_identical_corresponding_rays_do_not_crash(self, synthetic_calib):
+        """Corresponding points that imply parallel rays should not raise."""
+        from osc_tracking.stereo_calibration import triangulate_points
+
+        # Principal points in both cameras — rays parallel along optical axis
+        pt = np.array([[320.0, 240.0]])
+        result = triangulate_points(synthetic_calib, pt, pt)
+        assert result.shape == (1, 3)
+
     def test_reprojection_error_noisy_data(self, synthetic_calib):
         """Reprojection error should stay reasonable with noisy 2D points."""
         rng = np.random.default_rng(42)

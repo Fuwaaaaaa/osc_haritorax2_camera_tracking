@@ -196,8 +196,15 @@ def triangulate_points(
     # Triangulate
     points_4d = cv2.triangulatePoints(calib.P1, calib.P2, pts1_undist, pts2_undist)
 
-    # Convert from homogeneous to 3D
-    points_3d = np.asarray(points_4d[:3] / points_4d[3:4])
+    # Convert from homogeneous to 3D. Guard w ~ 0 (points at infinity,
+    # parallel-ray degeneracies) — replace with NaN so downstream
+    # sanity checks reject the point instead of propagating inf.
+    w = points_4d[3:4]
+    degenerate = np.abs(w) < 1e-9
+    safe_w = np.where(degenerate, 1.0, w)
+    points_3d = np.asarray(points_4d[:3] / safe_w)
+    if np.any(degenerate):
+        points_3d[:, degenerate[0]] = np.nan
     result: np.ndarray = points_3d.T  # Nx3
     return result
 
