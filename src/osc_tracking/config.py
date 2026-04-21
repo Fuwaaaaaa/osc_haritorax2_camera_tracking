@@ -9,11 +9,24 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import paths
+
 logger = logging.getLogger(__name__)
 
-CONFIG_DIR = Path("config")
-DEFAULT_CONFIG = CONFIG_DIR / "default.json"
-USER_CONFIG = CONFIG_DIR / "user.json"
+
+def _default_config_path() -> Path:
+    return paths.default_config_path()
+
+
+def _user_config_path() -> Path:
+    return paths.user_config_path()
+
+
+# Back-compat module-level aliases (resolved lazily at import time).
+# Prefer paths.default_config_path() / paths.user_config_path() in new code.
+CONFIG_DIR = paths.config_dir()
+DEFAULT_CONFIG = _default_config_path()
+USER_CONFIG = _user_config_path()
 
 
 @dataclass
@@ -63,7 +76,7 @@ class TrackingConfig:
 
     def save(self, path: Path | None = None) -> None:
         """Save config to JSON file."""
-        path = path or USER_CONFIG
+        path = path or _user_config_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {}
         for k, v in self.__dict__.items():
@@ -79,12 +92,11 @@ class TrackingConfig:
         """Load config from JSON file, falling back to defaults."""
         config = cls()
 
-        # Load default config
-        if DEFAULT_CONFIG.exists():
-            _apply_json(config, DEFAULT_CONFIG)
+        default = _default_config_path()
+        if default.exists():
+            _apply_json(config, default)
 
-        # Override with user config
-        target = path or USER_CONFIG
+        target = path if path is not None else _user_config_path()
         if target.exists():
             _apply_json(config, target)
 

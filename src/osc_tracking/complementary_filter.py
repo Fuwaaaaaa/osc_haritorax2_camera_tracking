@@ -30,6 +30,10 @@ class JointState:
     last_valid_position: np.ndarray = field(default_factory=lambda: np.zeros(3))
     last_valid_rotation: Rotation = field(default_factory=lambda: Rotation.identity())
     stationary_timer: float = 0.0
+    # Explicit initialization flag — replaces the old
+    # ``np.allclose(last_valid_position, 0.0)`` heuristic, which misfired
+    # when a joint legitimately sat near the origin.
+    initialized: bool = False
 
 
 # Tracked joints — matches HaritoraX2 tracker layout + camera-derived joints.
@@ -60,6 +64,11 @@ class ComplementaryFilter:
     DRIFT_VELOCITY_THRESHOLD = 0.02  # m/s
     DRIFT_HOLD_SECONDS = 10.0
     DRIFT_NOISE_SCALE = 0.01  # 1% of normal when stationary
+    # Maximum per-frame position jump allowed when the velocity-based
+    # predictor says the joint is stationary. Old value 0.5m let a single
+    # misdetection teleport the joint half a meter; 0.15m covers real
+    # recovery-from-occlusion motion without accepting obvious outliers.
+    OUTLIER_STATIC_FLOOR_M = 0.15
 
     def __init__(
         self,
@@ -107,23 +116,29 @@ class ComplementaryFilter:
             if not np.all(np.isfinite(quat)):
                 imu_rotation = None
 
-        # Outlier rejection: if camera position jumps more than 3x expected
-        if (
-            camera_position is not None
-            and not np.allclose(state.last_valid_position, 0.0)
-        ):
+        # Outlier rejection: if camera position jumps more than 3x expected.
+        # Static floor (OUTLIER_STATIC_FLOOR_M) bounds the per-frame jump
+        # when the joint is essentially stationary — plenty of headroom for
+        # real motion, but tight enough to reject single-frame false matches.
+        # ``float(...)`` around both sides keeps the mypy numpy stubs happy
+        # with the ``>`` comparison on all supported numpy versions.
+        if camera_position is not None and state.initialized:
             displacement = float(np.linalg.norm(camera_position - state.position))
             max_expected = float(
-                max(np.linalg.norm(state.velocity) * dt * 3.0, 0.5)
+                max(
+                    np.linalg.norm(state.velocity) * dt * 3.0,
+                    self.OUTLIER_STATIC_FLOOR_M,
+                )
             )
             if displacement > max_expected and confidence < 0.9:
                 camera_position = None  # Reject outlier
 
         # Position update
         if camera_position is not None and confidence > self.partial_threshold:
-            # First valid position: snap directly (no smoothing from origin)
-            if np.allclose(state.last_valid_position, 0.0):
+            if not state.initialized:
+                # First valid position: snap directly.
                 state.position = camera_position.copy()
+                state.initialized = True
             else:
                 alpha = self._smooth_alpha(dt)
                 weight = confidence

@@ -110,6 +110,58 @@ class TestOutlierRejection:
         # Should NOT jump to 100,100,100 — outlier should be rejected
         assert np.linalg.norm(state.position) < 50.0
 
+    def test_stationary_small_jump_rejected(self, cf):
+        """When stationary, a 0.3m jump (> realistic single-frame motion) is rejected."""
+        pos = np.array([1.0, 1.0, 1.0])
+        imu = Rotation.identity()
+
+        # Establish a stationary baseline
+        for _ in range(10):
+            cf.update("Hips", pos, imu, confidence=0.9, dt=1 / 30)
+
+        # 0.3m jump in one frame at mid confidence — implausible when stationary
+        jump = pos + np.array([0.3, 0.0, 0.0])
+        state = cf.update("Hips", jump, imu, confidence=0.5, dt=1 / 30)
+
+        # Should not accept the jump (old bound was 0.5m so this passed through).
+        assert np.linalg.norm(state.position - pos) < 0.15
+
+    def test_high_confidence_bypasses_outlier_rejection(self, cf):
+        """Outlier rejection only applies below 0.9 confidence — at 0.95 the
+        camera input is accepted even when it looks like a big jump."""
+        pos = np.array([1.0, 1.0, 1.0])
+        imu = Rotation.identity()
+        cf.update("Hips", pos, imu, confidence=0.9, dt=1 / 30)
+
+        teleport = pos + np.array([2.0, 0.0, 0.0])
+        state = cf.update("Hips", teleport, imu, confidence=0.95, dt=1 / 30)
+        # The update was accepted: last_valid_position tracks the new camera pos,
+        # even though the exponentially smoothed render position hasn't arrived yet.
+        np.testing.assert_allclose(state.last_valid_position, teleport)
+
+
+class TestInitializedFlag:
+    """After replacing (0,0,0) heuristic with an explicit flag, joint states
+    near the origin should behave like any other position."""
+
+    def test_first_update_at_origin_snaps_and_initializes(self, cf):
+        imu = Rotation.identity()
+        state = cf.update("Hips", np.zeros(3), imu, confidence=0.9, dt=1 / 30)
+        assert np.allclose(state.position, 0.0)
+        assert state.initialized is True
+
+    def test_outlier_rejection_active_even_when_last_pos_is_origin(self, cf):
+        """Legitimate origin positions must not bypass outlier checks."""
+        imu = Rotation.identity()
+        # Establish at origin
+        cf.update("Hips", np.zeros(3), imu, confidence=0.9, dt=1 / 30)
+
+        # Now a huge jump at medium confidence — must be rejected even though
+        # last_valid_position is exactly (0,0,0).
+        jump = np.array([50.0, 0.0, 0.0])
+        state = cf.update("Hips", jump, imu, confidence=0.5, dt=1 / 30)
+        assert np.linalg.norm(state.position) < 10.0
+
 
 class TestSmoothRecovery:
     def test_frame_rate_independent(self, cf):
