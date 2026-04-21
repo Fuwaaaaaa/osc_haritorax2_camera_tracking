@@ -43,6 +43,13 @@ class TrackingRecorder:
         self._start_time = time.monotonic()
         self._frame_count = 0
         logger.info("Recording started: %s", self._path)
+        # Privacy notice: absolute camera-frame positions are stored as-is.
+        # Sharing the resulting JSONL can leak room layout / rig geometry.
+        logger.warning(
+            "プライバシー注意: 記録には絶対位置 (position) が含まれます — "
+            "共有前に内容を確認してください (%s)",
+            self._path,
+        )
         return self._path
 
     def record_frame(self, joints_data: dict, mode: str) -> None:
