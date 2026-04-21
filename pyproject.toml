@@ -10,11 +10,13 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
-    "mediapipe>=0.10.9",
-    "opencv-python>=4.8.0",
-    "python-osc>=1.8.3",
-    "numpy>=1.24.0",
-    "scipy>=1.11.0",
+    # Upper bounds pinned to tested majors; raise after verifying the
+    # next major against the full pytest suite + a real-device smoke run.
+    "mediapipe>=0.10.9,<0.12",
+    "opencv-python>=4.8.0,<4.12",
+    "python-osc>=1.8.3,<2.0",
+    "numpy>=1.24.0,<2.2",
+    "scipy>=1.11.0,<1.15",
 ]
 
 [project.optional-dependencies]
