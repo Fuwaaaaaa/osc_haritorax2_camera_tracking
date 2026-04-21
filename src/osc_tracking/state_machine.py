@@ -114,8 +114,8 @@ class TrackingStateMachine:
                 if elapsed >= self.config.futon_dwell_time_sec:
                     self._futon_active = False
                     self._futon_exit_pending_since = None
-            else:
-                self._futon_exit_pending_since = None
+            # When not active, _futon_exit_pending_since is already None
+            # (cleared on the active→inactive transition above).
         # In deadband (exit_threshold <= pitch < pitch_threshold): no change
 
     def on_osc_received(self) -> None:

@@ -120,12 +120,12 @@ class ComplementaryFilter:
         # Static floor (OUTLIER_STATIC_FLOOR_M) bounds the per-frame jump
         # when the joint is essentially stationary — plenty of headroom for
         # real motion, but tight enough to reject single-frame false matches.
+        # Casting both operands to ``float`` up front keeps the mypy numpy
+        # stubs happy with the ``>`` comparison and the built-in ``max``.
         if camera_position is not None and state.initialized:
-            displacement = np.linalg.norm(camera_position - state.position)
-            max_expected = max(
-                np.linalg.norm(state.velocity) * dt * 3.0,
-                self.OUTLIER_STATIC_FLOOR_M,
-            )
+            displacement = float(np.linalg.norm(camera_position - state.position))
+            velocity_bound = float(np.linalg.norm(state.velocity)) * dt * 3.0
+            max_expected = max(velocity_bound, self.OUTLIER_STATIC_FLOOR_M)
             if displacement > max_expected and confidence < 0.9:
                 camera_position = None  # Reject outlier
 
