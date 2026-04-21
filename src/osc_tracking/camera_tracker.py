@@ -138,7 +138,7 @@ class CameraTracker:
             return None
 
         try:
-            buf = np.ndarray(
+            buf: np.ndarray = np.ndarray(
                 (JOINT_COUNT, FLOATS_PER_JOINT),
                 dtype=np.float64,
                 buffer=self._shm.buf,
@@ -194,7 +194,7 @@ def _camera_worker(
     except FileNotFoundError:
         return
 
-    buf = np.ndarray(
+    buf: np.ndarray = np.ndarray(
         (JOINT_COUNT, FLOATS_PER_JOINT),
         dtype=np.float64,
         buffer=shm.buf,

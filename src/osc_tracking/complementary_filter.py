@@ -112,8 +112,10 @@ class ComplementaryFilter:
             camera_position is not None
             and not np.allclose(state.last_valid_position, 0.0)
         ):
-            displacement = np.linalg.norm(camera_position - state.position)
-            max_expected = max(np.linalg.norm(state.velocity) * dt * 3.0, 0.5)
+            displacement = float(np.linalg.norm(camera_position - state.position))
+            max_expected = float(
+                max(np.linalg.norm(state.velocity) * dt * 3.0, 0.5)
+            )
             if displacement > max_expected and confidence < 0.9:
                 camera_position = None  # Reject outlier
 
