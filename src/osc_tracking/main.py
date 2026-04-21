@@ -17,6 +17,7 @@ from .notifications import NotificationManager
 from .osc_receiver import OSCReceiver
 from .osc_remapper import OSCRemapper
 from .osc_sender import OSCSender
+from .preflight import PreflightIssue, run_preflight_checks
 from .profiler import PerformanceProfiler
 from .quality_meter import QualityLevel, QualityMeter
 from .state_machine import TrackingMode
@@ -115,6 +116,14 @@ def main() -> None:
         cfg.osc_receive_port = args.osc_port
     if args.vrchat_port is not None:
         cfg.osc_send_port = args.vrchat_port
+
+    # Preflight — fail fast with actionable Japanese messages before we
+    # build subsystems and hit a deep traceback.
+    issues = run_preflight_checks(cfg, no_camera=args.no_camera)
+    for issue in issues:
+        print(issue.format(), file=sys.stderr)
+    if PreflightIssue.has_errors(issues):
+        sys.exit(1)
 
     # Build components
     camera_config = CameraConfig(
