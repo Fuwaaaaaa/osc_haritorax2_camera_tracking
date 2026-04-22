@@ -96,10 +96,16 @@ def decode_rotation(data: bytes) -> Rotation | None:
     qy = y_raw * ROTATION_SCALAR
     qz = -z_raw * ROTATION_SCALAR
     qw = -w_raw * ROTATION_SCALAR
+    # Guard against a near-zero quaternion before calling scipy: older
+    # Rotation.from_quat versions silently normalise (0,0,0,0) to the
+    # identity rotation, which would look like a valid sample and
+    # spuriously keep is_connected=True while bones freeze at identity.
+    if abs(qx) + abs(qy) + abs(qz) + abs(qw) < 1e-9:
+        logger.warning("BLE sensor payload decoded to zero quaternion; dropping frame")
+        return None
     try:
         return Rotation.from_quat([qx, qy, qz, qw])
     except ValueError as exc:
-        # Zero-length quaternion or other numerical pathology.
         logger.warning("BLE sensor payload produced invalid quaternion: %s", exc)
         return None
 
@@ -126,7 +132,9 @@ class BLEReceiver:
         name_prefix: str = DEFAULT_NAME_PREFIX,
         scan_timeout_sec: float = 10.0,
     ) -> None:
-        self.local_name_to_bone: dict[str, str] = dict(local_name_to_bone or {})
+        mapping = dict(local_name_to_bone or {})
+        self._warn_on_unknown_bones(mapping)
+        self.local_name_to_bone: dict[str, str] = mapping
         self.name_prefix = name_prefix
         self.scan_timeout_sec = float(scan_timeout_sec)
 
@@ -137,6 +145,27 @@ class BLEReceiver:
         self._running: bool = False
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+
+    @staticmethod
+    def _warn_on_unknown_bones(mapping: dict[str, str]) -> None:
+        """Warn when config maps to bone names FusionEngine will not read.
+
+        Catches typos like ``"hips"`` vs ``"Hips"`` or ``"LeftFeet"`` that
+        would otherwise silently leave the bone empty forever.
+        """
+        # Lazy import so the receiver module stays importable in contexts
+        # that don't pull in the full tracking stack.
+        from .complementary_filter import JOINT_NAMES
+        known = set(JOINT_NAMES)
+        unknown = sorted({bone for bone in mapping.values() if bone not in known})
+        if unknown:
+            logger.warning(
+                "BLE bone mapping contains unknown bone name(s) %s; "
+                "these peripherals will receive data but FusionEngine "
+                "will never read them. Valid names: %s",
+                unknown,
+                sorted(known),
+            )
 
     # ------------------------------------------------------------------
     # IMUReceiver protocol surface

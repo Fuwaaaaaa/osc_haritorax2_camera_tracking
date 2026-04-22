@@ -8,6 +8,7 @@
 - **`src/osc_tracking/receiver_protocol.py`**: OSC / BLE / 将来の Serial で共有する `IMUReceiver` Protocol (`@runtime_checkable`)
 - **`src/osc_tracking/tracker_mapping.py`**: HaritoraX2 native label と SlimeVR OSC index の対応を一元化、OSCReceiver / BLEReceiver 両方から再利用
 - **`docs/ble-direct-guide.md`**: BLE 直接接続のセットアップ手順と EXPERIMENTAL 注記
+- **`docs/other-trackers.md`**: SlimeVR native / Tundra / その他 SlimeVR-Server 互換トラッカーの対応マトリクス。"動作報告求む" ステータスと Issue テンプレートで community PR 受け入れ体制を明示
 - **設定項目**: `receiver_type`, `ble_device_name_prefix`, `ble_scan_timeout_sec`, `ble_local_name_to_bone`
 - **CLI フラグ**: `--receiver {osc,ble}`, `--ble-device NAME`
 
@@ -18,9 +19,6 @@
 - **汎用IMUミドルウェアへのリブランド（文言統一パス）**: docstring / CLI help / 通知 / setup wizard / README / QUICKSTART / DESIGN から HaritoraX2 特権化表現を除去し、OSC対応IMUトラッカー汎用 framing に統一。HaritoraX2 は「最初の対応デバイス」として位置付け。コード動作は不変
 - **pyproject.toml**: `bleak>=0.21,<1.0` を dependencies に追加
 - **build_exe.py**: PyInstaller hidden imports に `bleak.backends.winrt.*` を追加
-
-### Added (既出)
-- **`docs/other-trackers.md`**: SlimeVR native / Tundra / その他 SlimeVR-Server 互換トラッカーの対応マトリクス。"動作報告求む" ステータスと Issue テンプレートで community PR 受け入れ体制を明示
 
 ## v0.2.2 (2026-04-14) — Hardening & Rebrand
 

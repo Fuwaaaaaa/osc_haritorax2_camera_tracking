@@ -97,6 +97,11 @@ def _build_receiver(cfg: TrackingConfig):
             name_prefix=cfg.ble_device_name_prefix,
             scan_timeout_sec=cfg.ble_scan_timeout_sec,
         )
+    if cfg.receiver_type != "osc":
+        logger.warning(
+            "Unknown receiver_type=%r; falling back to OSC. Valid values: 'osc', 'ble'.",
+            cfg.receiver_type,
+        )
     # default: OSC via SlimeVR Server
     return OSCReceiver(host=cfg.osc_receive_host, port=cfg.osc_receive_port)
 

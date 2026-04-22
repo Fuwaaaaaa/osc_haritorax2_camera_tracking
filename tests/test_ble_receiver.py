@@ -13,9 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import struct
-import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -77,6 +76,26 @@ def test_decode_rotation_accepts_trailing_bytes():
     """Extra gravity/ankle bytes after the 8-byte quaternion are ignored."""
     payload = struct.pack("<hhhh", 10, 20, 30, 40) + b"\xff" * 20
     assert decode_rotation(payload) is not None
+
+
+# ---------- bone name validation on init ----------
+
+def test_init_warns_on_unknown_bone_name(caplog):
+    """Typo in config bone name must surface a warning, not fail silently."""
+    caplog.set_level("WARNING", logger="osc_tracking.ble_receiver")
+    BLEReceiver(local_name_to_bone={"HaritoraX2-AAAA": "hips"})  # lowercase typo
+    assert any("unknown bone name" in r.message.lower() for r in caplog.records)
+
+
+def test_init_accepts_all_valid_bone_names(caplog):
+    """Canonical skeleton bone names must not trigger the warning."""
+    caplog.set_level("WARNING", logger="osc_tracking.ble_receiver")
+    BLEReceiver(local_name_to_bone={
+        "HaritoraX2-A": "Hips",
+        "HaritoraX2-B": "Chest",
+        "HaritoraX2-C": "LeftElbow",
+    })
+    assert not any("unknown bone" in r.message.lower() for r in caplog.records)
 
 
 # ---------- pull interface: freshness / staleness ----------
@@ -142,18 +161,6 @@ def test_handle_sensor_data_ignores_malformed_payload():
 
 
 # ---------- lifecycle: thread start/stop with bleak mocked ----------
-
-def _patch_scanner_empty():
-    """Patch BleakScanner.discover to return [] instantly."""
-    async def _empty_discover(*_args, **_kwargs):
-        return []
-
-    scanner = MagicMock()
-    scanner.discover = _empty_discover
-    return patch.object(ble_mod, "asyncio", asyncio), patch(
-        "bleak.BleakScanner", scanner
-    )
-
 
 def test_start_stop_lifecycle_with_no_devices(monkeypatch):
     """Receiver should start, find nothing, and exit cleanly on stop()."""
