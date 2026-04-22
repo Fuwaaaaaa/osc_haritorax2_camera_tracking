@@ -9,7 +9,6 @@ from osc_tracking.tracker_mapping import (
     slimevr_osc_addresses,
 )
 
-
 EXPECTED_IMU_BONES = {
     "Hips", "Chest",
     "LeftFoot", "RightFoot",

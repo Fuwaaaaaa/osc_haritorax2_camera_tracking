@@ -271,10 +271,11 @@ class BLEReceiver:
                 await self._sleep_interruptible(RECONNECT_DELAY_SEC)
                 continue
 
-            matches = [
-                d for d in devices
-                if getattr(d, "name", None) and d.name.startswith(self.name_prefix)
-            ]
+            matches = []
+            for d in devices:
+                name = getattr(d, "name", None)
+                if name and name.startswith(self.name_prefix):
+                    matches.append(d)
             if not matches:
                 logger.info(
                     "No %s* devices found; rescanning in %.0fs",

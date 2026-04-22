@@ -22,13 +22,12 @@ pytest.importorskip("bleak", reason="bleak not installed; skipping BLE receiver 
 
 from osc_tracking import ble_receiver as ble_mod  # noqa: E402
 from osc_tracking.ble_receiver import (  # noqa: E402
-    BLEReceiver,
-    BoneData,
     FRESHNESS_WINDOW_SEC,
     ROTATION_SCALAR,
+    BLEReceiver,
+    BoneData,
     decode_rotation,
 )
-
 
 # ---------- decode_rotation: pure function tests ----------
 
