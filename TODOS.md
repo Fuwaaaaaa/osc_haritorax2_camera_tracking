@@ -50,13 +50,28 @@
 - **Depends on:** v0.1リリース後
 - **Context:** CEO Subagent #2指摘。「最も弱いリンク」
 
+### GitHub Issueテンプレート（デバイス互換性レポート）
+- **What:** `.github/ISSUE_TEMPLATE/device-compat.yml` を作成し、docs/other-trackers.md が誘導する「動作報告」フォーマットを構造化
+- **Why:** other-trackers.md は Issues への自由記述に誘導しているため、デバイス名 / ファームウェア / トラッカー数 / ログ等の必須情報が揃わないリスク。plan (synchronous-hugging-gray.md) の Assignment で自問指示済み
+- **Effort:** XS（CC: 5分）
+- **Priority:** P3
+- **Context:** GitHub の issue form (YAML) を使えば必須フィールド指定可能。other-trackers.md の "動作報告の書き方" セクションをそのまま form 化
+
+### SlimeVR 実機動作検証 + docs/slimevr-setup-guide.md
+- **What:** SlimeVR native トラッカーを実機テスト → docs/slimevr-setup-guide.md を作成 → other-trackers.md で SlimeVR を 🟡 未検証 → ✅ 動作確認 に昇格
+- **Why:** other-trackers.md は現状「原理的に動くはず」と書いてあるが実証されていない。実機確認できれば community の信頼性が跳ね上がる。リブランドの delivery 完成形
+- **Effort:** M（CC: 1時間、ただしハード所持が前提）
+- **Priority:** P3
+- **Depends on:** SlimeVR native トラッカーの入手
+- **Context:** `osc_receiver.py:DEFAULT_BONE_ADDRESSES` は SlimeVR Server OSC output を直接受信するため、コード変更は理論上不要。セットアップガイドと動作証跡のみが必要
+
 ### 複数IMUトラッカー対応（SlimeVR, Tundra等）
 - **What:** HaritoraX2以外のIMUトラッカーからのOSCデータ受信対応
 - **Why:** リブランド後の自然な拡張。ユーザーベース拡大
 - **Context:** CEO Subagent #1, #2とも推奨
 - **Effort:** M（CC: 1時間）
 - **Priority:** P3
-- **Depends on:** リブランド完了後
+- **Depends on:** リブランド完了後、SlimeVR 実機動作検証
 
 ### N台カメラ対応
 - **What:** 2台以上のカメラをサポート

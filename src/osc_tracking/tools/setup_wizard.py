@@ -3,7 +3,7 @@
 Walks the user through 7 steps to get from zero to tracking:
 1. MediaPipeモデルダウンロード
 2. カメラ確認
-3. SlimeTora + SlimeVR Server接続
+3. SlimeVR Server接続（HaritoraX2 の場合は SlimeTora も経由）
 4. OSCポート確認
 5. ステレオキャリブレーション
 6. テスト起動
@@ -213,7 +213,7 @@ def _run_step_2_cameras(cam1: int, cam2: int) -> bool:
 
 
 def _run_step_3_slimevr() -> bool:
-    """Step 3: Guide user to set up SlimeTora + SlimeVR."""
+    """Step 3: Guide user to set up SlimeVR Server (+ SlimeTora for HaritoraX2)."""
     print(f"\n      {BOLD}必要なソフトウェア:{RESET}")
     print("      1. SlimeVR Server — OSCでデータを出力")
     print("         https://slimevr.dev/download")

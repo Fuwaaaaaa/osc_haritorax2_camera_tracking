@@ -1,8 +1,8 @@
 """Connection check tool  - verify SlimeVR Server OSC output.
 
 Listens for OSC messages and reports what's coming in.
-Use this before running the full tracker to confirm SlimeTora + SlimeVR
-Server are sending data correctly.
+Use this before running the full tracker to confirm SlimeVR Server
+(and SlimeTora for HaritoraX2) are sending data correctly.
 
 Usage:
     python -m osc_tracking.tools.connection_check
@@ -40,7 +40,7 @@ def main() -> None:
     print(f"{'=' * 55}{RESET}")
     print()
     print("  Waiting for OSC messages from SlimeVR Server...")
-    print("  Make sure SlimeTora + SlimeVR Server are running.")
+    print("  Make sure SlimeVR Server is running (HaritoraX2 also needs SlimeTora).")
     print()
 
     # Track received data

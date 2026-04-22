@@ -36,7 +36,7 @@ class BoneData:
 class OSCReceiver:
     """Receives and parses IMU tracker OSC messages.
 
-    Expects SlimeVR Server OSC output format (see DEFAULT_TRACKER_MAP).
+    Expects SlimeVR Server OSC output format (see DEFAULT_BONE_ADDRESSES).
     Works with any tracker that routes through SlimeVR Server, including
     HaritoraX2 via SlimeTora, SlimeVR native trackers, and Tundra Labs.
     """

@@ -27,7 +27,7 @@
 1. SlimeVR Server の OSC Output を有効化し、送信先を `127.0.0.1:6969` に設定
 2. 本ミドルウェアの `config/default.json` で `osc_receiver.port` を 6969 に合わせる
 3. デフォルトのトラッカーマッピング: ID 1=Hips / 2=Chest / 3=LeftFoot / 4=RightFoot / 5=LeftKnee / 6=RightKnee / 7=LeftElbow / 8=RightElbow
-4. 異なる構成の場合は `src/osc_tracking/osc_receiver.py` の `DEFAULT_TRACKER_MAP` を参照してカスタマイズ
+4. 異なる構成の場合は `src/osc_tracking/osc_receiver.py` の `OSCReceiver.DEFAULT_BONE_ADDRESSES` を参照してカスタマイズ
 
 ## 動作報告の書き方
 
