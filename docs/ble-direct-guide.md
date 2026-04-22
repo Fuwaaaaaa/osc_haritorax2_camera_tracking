@@ -96,12 +96,6 @@ Connected to HaritoraX2-C3D4 (-> Chest)
 
 ## 動作報告の書き方
 
-[新しい Issue](https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/issues/new) で以下を教えてください:
-
-- OS / bleak バージョン (`pip show bleak`)
-- HaritoraX2 のファームウェアバージョン
-- `ble_scan` の出力
-- 動いた箇所 / 動かなかった箇所
-- 起動時の `osc_tracking` ログ
+[**Device compatibility report テンプレート**](https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/issues/new?template=device-compat.yml) から Issue を立ててください。フォームの「接続経路」で **BLE 直接 (--receiver ble, experimental)** を選択 → OS / バージョン / ログ / 動いた箇所・詰まった箇所を入力すれば必要情報が揃います。bleak のバージョン (`pip show bleak`) と `ble_scan` の出力も「追加情報」欄に貼ってもらえると助かります。
 
 フィードバックで `docs/other-trackers.md` の動作確認表を更新します。

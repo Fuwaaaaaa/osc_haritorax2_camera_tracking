@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Device compatibility report (HaritoraX2 / SlimeVR native / Tundra / 他)
+    url: https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/issues/new?template=device-compat.yml
+    about: 「動いた/動かなかった」報告はこのテンプレートが一番早く、docs/other-trackers.md の更新に直結します。
+  - name: Documentation
+    url: https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/blob/main/README.md
+    about: README / QUICKSTART / docs/ 配下のガイドを先に参照するとセットアップ系の多くは解決します。

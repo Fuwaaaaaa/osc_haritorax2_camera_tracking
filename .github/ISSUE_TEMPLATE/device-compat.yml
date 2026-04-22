@@ -1,0 +1,117 @@
+name: デバイス動作報告 / Device compatibility report
+description: HaritoraX2 や SlimeVR native / Tundra 等のトラッカーを本ミドルウェアで使ってみた結果を共有する
+title: "[device] <デバイス名>: <動いた|動かなかった>"
+labels: ["device-compat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        動作報告ありがとうございます！ [docs/other-trackers.md](https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/blob/main/docs/other-trackers.md) の互換性マトリクスをあなたの報告で更新します。
+
+        **動いた / 動かなかった どちらも歓迎**。詰まった箇所があれば「今後のユーザーがつまずかないために」詳しく書いてもらえると助かります。
+
+  - type: dropdown
+    id: connection_path
+    attributes:
+      label: 接続経路 / Connection path
+      description: どの経路で本ミドルウェアにデータを送っていますか？
+      options:
+        - "OSC 経由 (SlimeVR Server → :6969)"
+        - "BLE 直接 (--receiver ble, experimental)"
+        - "その他 (本文で説明)"
+    validations:
+      required: true
+
+  - type: input
+    id: device_model
+    attributes:
+      label: デバイス / Device
+      description: 例 HaritoraX2 / SlimeVR (native) / Tundra Labs Tracker / 他
+      placeholder: "HaritoraX2"
+    validations:
+      required: true
+
+  - type: input
+    id: tracker_count
+    attributes:
+      label: トラッカー数 / Number of trackers
+      description: 実際に接続している物理トラッカー数
+      placeholder: "6 or 8"
+    validations:
+      required: true
+
+  - type: input
+    id: firmware_version
+    attributes:
+      label: デバイスのファームウェアバージョン / Device firmware version
+      description: 分かれば教えてください（分からなければ "不明" で OK）
+      placeholder: "v1.2.3 / 不明"
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - "Windows 11"
+        - "Windows 10"
+        - "macOS"
+        - "Linux"
+        - "その他"
+    validations:
+      required: true
+
+  - type: input
+    id: osc_tracking_version
+    attributes:
+      label: osc-tracking のバージョン / Middleware version
+      description: pyproject.toml / VERSION ファイル / exe 名に付いたバージョン
+      placeholder: "v0.2.2 / main branch @ <short-sha>"
+    validations:
+      required: true
+
+  - type: input
+    id: slimevr_version
+    attributes:
+      label: (OSC経路の場合) SlimeVR Server バージョン
+      description: BLE 直接接続の場合は空欄で OK
+      placeholder: "0.12.0"
+
+  - type: dropdown
+    id: result
+    attributes:
+      label: 結果 / Result
+      options:
+        - "✅ 完全動作"
+        - "🟡 部分動作 (一部 tracker または機能が動かない)"
+        - "❌ 動かなかった"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_worked
+    attributes:
+      label: 動いた箇所 / What worked
+      description: 「VRChat で 8 トラッカー全部が追従した」「キャリブレーションは通った」など
+      placeholder: "- SlimeTora 経由で接続 OK\n- VRChat でアバターがフルボディ追従\n- 布団モード (FUTON_MODE) も正常遷移"
+
+  - type: textarea
+    id: what_didnt
+    attributes:
+      label: 詰まった箇所 / What didn't work
+      description: 動かなかった場合、どこで詰まったか / エラーメッセージ / 再現手順
+      placeholder: "- `ble_scan` で HaritoraX2-* は見えるが connect 時に bleak.BleakError\n- ~3 割のフレームでアバターがジャンプ"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ / Console output
+      description: |
+        `python -m osc_tracking.main ...` または `osc_tracking.exe` のコンソール出力で
+        関連しそうな行があれば。長ければ起動直後～エラー発生の範囲で。
+      render: shell
+
+  - type: textarea
+    id: extra_context
+    attributes:
+      label: 追加情報 / Anything else
+      description: スクリーンショット、写真、関連 Issue へのリンクなど

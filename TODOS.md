@@ -61,12 +61,8 @@
 - **Depends on:** BLE 実機動作検証完了
 - **Context:** pyserial を依存に追加し `SerialReceiver` クラスを `ble_receiver.py` と同じ `IMUReceiver` protocol で実装。haritorax-interpreter の `src/mode/com.ts` を参照
 
-### GitHub Issueテンプレート（デバイス互換性レポート）
-- **What:** `.github/ISSUE_TEMPLATE/device-compat.yml` を作成し、docs/other-trackers.md が誘導する「動作報告」フォーマットを構造化
-- **Why:** other-trackers.md は Issues への自由記述に誘導しているため、デバイス名 / ファームウェア / トラッカー数 / ログ等の必須情報が揃わないリスク。plan (synchronous-hugging-gray.md) の Assignment で自問指示済み
-- **Effort:** XS（CC: 5分）
-- **Priority:** P3
-- **Context:** GitHub の issue form (YAML) を使えば必須フィールド指定可能。other-trackers.md の "動作報告の書き方" セクションをそのまま form 化
+### ~~GitHub Issueテンプレート（デバイス互換性レポート）~~ ✅ 完了
+- **解決:** `.github/ISSUE_TEMPLATE/device-compat.yml` を作成。接続経路 (OSC / BLE / other) の dropdown、デバイス / トラッカー数 / OS / ファームウェア / osc-tracking バージョン / SlimeVR Server バージョン / 結果 (動作 / 部分 / 失敗) / 動いた箇所 / 詰まった箇所 / ログ、を必須・任意項目としてフォーム化。`config.yml` で contact link も追加。docs/other-trackers.md と docs/ble-direct-guide.md の誘導リンクを新 URL (`?template=device-compat.yml`) に更新。
 
 ### SlimeVR 実機動作検証 + docs/slimevr-setup-guide.md
 - **What:** SlimeVR native トラッカーを実機テスト → docs/slimevr-setup-guide.md を作成 → other-trackers.md で SlimeVR を 🟡 未検証 → ✅ 動作確認 に昇格
@@ -98,12 +94,8 @@
 - **Priority:** P3
 - **Depends on:** Phase 4完了
 
-### main.pyリファクタ（SubsystemManager）
-- **What:** main.pyのサブシステム初期化・更新・シャットダウンをSubsystemManagerクラスに抽出
-- **Why:** 現在245LOC。モジュール追加のたびに肥大化する構造。start/update/stopのライフサイクルが統一されていない
-- **Effort:** S（CC: 30分）
-- **Priority:** P3
-- **Context:** Eng Reviewで指摘。現状は動作に問題なし
+### ~~main.pyリファクタ（SubsystemManager）~~ ✅ 完了
+- **解決:** `src/osc_tracking/main.py:33-63` に `SubsystemManager` クラス抽出済み。`add` / `get` / `start_all` / `stop_all` で各サブシステム (tray / dashboard / viewer / discord / api / obs / vmc / recorder / profiler / bvh / gesture) のライフサイクルを統一。CHANGELOG v0.2.2 に既に記載あり。TODOS.md の stale entry を掃除 (/plan-eng-review See-Something-Say-Something 指摘より)。
 
 ### ステレオカメラ深度精度検証
 - **What:** 2台Webカメラ（0.5-1m間隔）で2-3m先の被写体の三角測量精度を実測

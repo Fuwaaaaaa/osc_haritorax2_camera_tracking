@@ -32,12 +32,6 @@
 
 ## 動作報告の書き方
 
-[新しい Issue](https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/issues/new) を立てて以下を教えてください:
-
-- デバイス名 / ファームウェアバージョン
-- トラッカー数
-- SlimeVR Server バージョン
-- 動いた箇所 / 詰まった箇所
-- ログ (`osc_tracking.exe` のコンソール出力) があればなお嬉しい
+[**Device compatibility report テンプレート**](https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/issues/new?template=device-compat.yml) から Issue を立ててください。必要項目がフォームで揃うので、デバイス名 / ファームウェア / トラッカー数 / SlimeVR Server バージョン / 動いた箇所 / 詰まった箇所 / ログ、を漏れなく共有できます。
 
 動作確認できたら README / この表を更新します。

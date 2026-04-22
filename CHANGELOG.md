@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **GitHub Issue template (`device-compat.yml`)**: HaritoraX2 / SlimeVR native / Tundra 等の動作報告を構造化フォームで受け取れるように。接続経路 (OSC / BLE / other) の dropdown、デバイス / トラッカー数 / OS / ファームウェア / バージョン / 結果 / ログ欄を含む。`docs/other-trackers.md` と `docs/ble-direct-guide.md` の誘導リンクを新 URL に更新
 - **BLE 直接接続レシーバ (experimental)**: `--receiver ble` で SlimeTora + SlimeVR Server を介さず HaritoraX2 に直接接続。`bleak` 依存、asyncio を背景スレッドで動かして既存の threaded アーキテクチャに橋渡し。Sensor characteristic (`00dbf1c6-...`) を購読し 4× int16LE クォータニオンを復号（haritorax-interpreter 仕様準拠、z/w 符号反転）。実機検証はまだ — 動作報告求む
 - **`src/osc_tracking/ble_receiver.py`** + **`tools/ble_scan.py`**: BLE レシーバ実装と、HaritoraX2 peripheral を列挙するディスカバリツール
 - **`src/osc_tracking/receiver_protocol.py`**: OSC / BLE / 将来の Serial で共有する `IMUReceiver` Protocol (`@runtime_checkable`)
