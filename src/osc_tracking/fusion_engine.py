@@ -1,12 +1,12 @@
 """Fusion engine — orchestrates all tracking components.
 
 Ties together the state machine, complementary filter, visual compass,
-camera tracker, and OSC receiver/sender into a single update loop.
+camera tracker, and IMU receiver/sender into a single update loop.
 
 Architecture:
     ┌──────────────┐    ┌──────────────┐
-    │ CameraTracker │    │ OSCReceiver   │
-    │ (subprocess)  │    │ (thread)      │
+    │ CameraTracker │    │ IMUReceiver   │
+    │ (subprocess)  │    │ (OSC or BLE)  │
     └──────┬───────┘    └──────┬───────┘
            │ joint data         │ bone rotation
            ▼                    ▼
@@ -37,8 +37,8 @@ import numpy as np
 from .camera_tracker import CameraTracker
 from .complementary_filter import JOINT_NAMES, ComplementaryFilter
 from .config import TrackingConfig
-from .osc_receiver import OSCReceiver
 from .osc_sender import OSCSender, TrackerOutput
+from .receiver_protocol import IMUReceiver
 from .state_machine import ModeConfig, TrackingMode, TrackingStateMachine
 from .visual_compass import compute_shoulder_yaw, correct_heading
 
@@ -51,7 +51,7 @@ class FusionEngine:
     def __init__(
         self,
         camera: CameraTracker,
-        receiver: OSCReceiver,
+        receiver: IMUReceiver,
         sender: OSCSender,
         config: TrackingConfig | None = None,
     ):
@@ -108,9 +108,9 @@ class FusionEngine:
             if cam2_vals:
                 cam2_conf = sum(cam2_vals) / len(cam2_vals)
 
-        # Update OSC connectivity
+        # Update IMU connectivity (receiver-agnostic: OSC, BLE, etc.)
         if self.receiver.is_connected:
-            self.state_machine.on_osc_received()
+            self.state_machine.on_imu_received()
 
         # Extract pitch from chest IMU for FUTON_MODE detection
         chest_rot = self.receiver.get_bone_rotation(self.config.futon_trigger_joint)

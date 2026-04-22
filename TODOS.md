@@ -42,13 +42,24 @@
 ### ~~汎用IMU+カメラフュージョンミドルウェアへのリブランド~~ ✅ 完了
 - **解決:** docstring / CLI help / 通知 / setup wizard / README / QUICKSTART / DESIGN を汎用 framing に統一。`docs/other-trackers.md` を新規作成し、SlimeVR native / Tundra 等の SlimeVR-Server 互換トラッカーを "動作報告求む" ステータスで列挙。コードは元から device-agnostic (OSC 入力)。
 
-### 直接BLE/Serial HaritoraX2接続
-- **What:** SlimeTora+SlimeVR依存を排除し、bleakライブラリで直接BLE接続
-- **Why:** SlimeToraは単一メンテナープロジェクト。破綻リスクがある。docs/haritora-protocol.mdに既にプロトコル仕様あり
-- **Effort:** L（CC: 2時間）
-- **Priority:** P2
-- **Depends on:** v0.1リリース後
-- **Context:** CEO Subagent #2指摘。「最も弱いリンク」
+### ~~直接 BLE HaritoraX2 接続~~ ✅ 完了 (experimental)
+- **解決:** `src/osc_tracking/ble_receiver.py` 実装済み。`--receiver ble` フラグで有効化。bleak 経由で HaritoraX2-* BLE peripheral をスキャン・接続・Sensor characteristic の notification を購読。`docs/ble-direct-guide.md` にセットアップ手順あり。実機動作検証は別 TODO (下記「BLE 実機動作検証」)。Serial (COM/SPP) 経路は別 TODO (下記「Serial (COM/SPP) 経路」)。
+
+### BLE 実機動作検証
+- **What:** HaritoraX2 実機で `--receiver ble` の動作確認、デコード精度・遅延・切断復旧の検証
+- **Why:** BLE 経路は haritorax-interpreter 公開実装を参考にしたが未検証。実機確認で `docs/ble-direct-guide.md` を ✅ に昇格し community 信頼性向上
+- **Effort:** M（CC: 1時間）
+- **Priority:** P3
+- **Depends on:** HaritoraX2 実機の入手
+- **Context:** 検証内容: (1) 全 8 トラッカーの BLE local name を `ble_scan` で列挙、(2) `ble_local_name_to_bone` にマッピング、(3) `--receiver ble` 起動、(4) VRChat 等で実際に姿勢追従、(5) 30 分程度の長時間安定性（切断リトライ確認）
+
+### Serial (COM/SPP) 経路
+- **What:** BLE に加えて GX6/GX2 USB ドングルおよび Bluetooth Classic (SPP) COM ポート経由の接続経路を追加
+- **Why:** BLE が使えない環境や、BLE より低遅延が期待できる有線接続を提供
+- **Effort:** M（CC: 1時間）
+- **Priority:** P3
+- **Depends on:** BLE 実機動作検証完了
+- **Context:** pyserial を依存に追加し `SerialReceiver` クラスを `ble_receiver.py` と同じ `IMUReceiver` protocol で実装。haritorax-interpreter の `src/mode/com.ts` を参照
 
 ### GitHub Issueテンプレート（デバイス互換性レポート）
 - **What:** `.github/ISSUE_TEMPLATE/device-compat.yml` を作成し、docs/other-trackers.md が誘導する「動作報告」フォーマットを構造化

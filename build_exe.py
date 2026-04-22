@@ -55,6 +55,16 @@ HIDDEN_IMPORTS = [
     "osc_tracking.motion_smoothing",
     "osc_tracking.profiler",
     "osc_tracking.stereo_calibration",
+    # BLE direct receiver (experimental) — bleak imports Windows Runtime
+    # bindings lazily, so PyInstaller needs explicit hints to bundle them.
+    "osc_tracking.ble_receiver",
+    "osc_tracking.receiver_protocol",
+    "osc_tracking.tracker_mapping",
+    "bleak",
+    "bleak.backends.winrt",
+    "bleak.backends.winrt.client",
+    "bleak.backends.winrt.scanner",
+    "bleak.backends.winrt.util",
 ]
 
 

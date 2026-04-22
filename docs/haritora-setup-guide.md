@@ -1,6 +1,8 @@
 # HaritoraX2 実機テストセットアップガイド
 
 > 他の OSC-compatible IMU トラッカー（SlimeVR native / Tundra 等）については [other-trackers.md](other-trackers.md) を参照。
+>
+> **方法B (experimental):** SlimeTora + SlimeVR Server を経由しない BLE 直接接続が使えます。詳細は [ble-direct-guide.md](ble-direct-guide.md)。実機検証はこれから、動作報告歓迎。
 
 HaritoraX2をOSC Trackingで使うための接続経路:
 

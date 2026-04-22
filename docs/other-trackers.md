@@ -9,6 +9,7 @@
 | デバイス | 接続経路 | ステータス | ガイド |
 |---|---|---|---|
 | HaritoraX2 | SlimeTora → SlimeVR Server → OSC | ✅ 動作確認 | [haritora-setup-guide.md](haritora-setup-guide.md) |
+| HaritoraX2 | BLE 直接 (bleak) | 🧪 experimental | [ble-direct-guide.md](ble-direct-guide.md) |
 
 ## 動作報告求む (原理的に動くはず)
 

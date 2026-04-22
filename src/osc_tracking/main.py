@@ -74,12 +74,54 @@ MODE_COLORS = {
 RESET = "\033[0m"
 
 
+def _build_receiver(cfg: TrackingConfig):
+    """Select and instantiate the IMU receiver based on config.
+
+    Returns an object conforming to the ``IMUReceiver`` protocol.
+    """
+    if cfg.receiver_type == "ble":
+        if not cfg.ble_local_name_to_bone:
+            logger.warning(
+                "receiver_type='ble' but ble_local_name_to_bone is empty; no peripherals will be mapped. "
+                "Run `python -m osc_tracking.tools.ble_scan` to discover devices, then populate config."
+            )
+        try:
+            from .ble_receiver import BLEReceiver
+        except ImportError as exc:
+            logger.error(
+                "Cannot import BLEReceiver (bleak missing?): %s. Falling back to OSC.", exc
+            )
+            return OSCReceiver(host=cfg.osc_receive_host, port=cfg.osc_receive_port)
+        return BLEReceiver(
+            local_name_to_bone=cfg.ble_local_name_to_bone,
+            name_prefix=cfg.ble_device_name_prefix,
+            scan_timeout_sec=cfg.ble_scan_timeout_sec,
+        )
+    if cfg.receiver_type != "osc":
+        logger.warning(
+            "Unknown receiver_type=%r; falling back to OSC. Valid values: 'osc', 'ble'.",
+            cfg.receiver_type,
+        )
+    # default: OSC via SlimeVR Server
+    return OSCReceiver(host=cfg.osc_receive_host, port=cfg.osc_receive_port)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="OSC Tracking - IMU Tracker + Dual WebCam Sensor Fusion")
     parser.add_argument("--config", type=str, help="Path to config JSON file")
     parser.add_argument("--cam1", type=int, help="Camera 1 index")
     parser.add_argument("--cam2", type=int, help="Camera 2 index")
+    parser.add_argument(
+        "--receiver",
+        choices=["osc", "ble"],
+        help="IMU receiver: 'osc' (SlimeVR Server, default) or 'ble' (direct HaritoraX2, experimental)",
+    )
     parser.add_argument("--osc-port", type=int, help="OSC receive port")
+    parser.add_argument(
+        "--ble-device",
+        type=str,
+        help="BLE advertising name prefix (default from config, e.g. 'HaritoraX2-')",
+    )
     parser.add_argument("--vrchat-port", type=int, help="VRChat send port")
     parser.add_argument("--no-camera", action="store_true", help="Run without cameras (OSC passthrough only)")
     parser.add_argument("--no-tray", action="store_true", help="Disable system tray quality meter")
@@ -116,6 +158,10 @@ def main() -> None:
         cfg.osc_receive_port = args.osc_port
     if args.vrchat_port is not None:
         cfg.osc_send_port = args.vrchat_port
+    if args.receiver is not None:
+        cfg.receiver_type = args.receiver
+    if args.ble_device is not None:
+        cfg.ble_device_name_prefix = args.ble_device
 
     # Preflight — fail fast with actionable Japanese messages before we
     # build subsystems and hit a deep traceback.
@@ -137,10 +183,7 @@ def main() -> None:
     )
 
     camera = CameraTracker(config=camera_config)
-    receiver = OSCReceiver(
-        host=cfg.osc_receive_host,
-        port=cfg.osc_receive_port,
-    )
+    receiver = _build_receiver(cfg)
     sender = OSCSender(
         host=cfg.osc_send_host,
         port=cfg.osc_send_port,

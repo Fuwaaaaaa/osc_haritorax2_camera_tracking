@@ -23,6 +23,8 @@ from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
 from scipy.spatial.transform import Rotation
 
+from .tracker_mapping import slimevr_osc_addresses
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,21 +47,10 @@ class OSCReceiver:
     # HaritoraX2 reaches this path via SlimeTora → SlimeVR Server.
     # SlimeVR native / Tundra reach it directly from SlimeVR Server.
     #
-    # HaritoraX2 native tracker names:
-    #   chest, hip, rightElbow, leftElbow,
-    #   rightKnee, rightAnkle, leftKnee, leftAnkle
-    #
-    # NOTE: HaritoraX2 sends rotation ONLY (no position).
-    DEFAULT_BONE_ADDRESSES = {
-        "/tracking/trackers/1/rotation": "Hips",       # hip tracker
-        "/tracking/trackers/2/rotation": "Chest",       # chest tracker
-        "/tracking/trackers/3/rotation": "LeftFoot",    # leftAnkle tracker
-        "/tracking/trackers/4/rotation": "RightFoot",   # rightAnkle tracker
-        "/tracking/trackers/5/rotation": "LeftKnee",    # leftKnee tracker
-        "/tracking/trackers/6/rotation": "RightKnee",   # rightKnee tracker
-        "/tracking/trackers/7/rotation": "LeftElbow",   # leftElbow tracker
-        "/tracking/trackers/8/rotation": "RightElbow",  # rightElbow tracker
-    }
+    # NOTE: IMU trackers here send rotation ONLY (no position).
+    # Mapping table is derived from the shared tracker_mapping module so
+    # that BLE and OSC receivers stay on the same 8-tracker roster.
+    DEFAULT_BONE_ADDRESSES = slimevr_osc_addresses()
 
     def __init__(
         self,

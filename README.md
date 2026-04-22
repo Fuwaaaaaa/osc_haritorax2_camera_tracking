@@ -28,6 +28,8 @@ OSC対応IMUトラッカーと2台のWebカメラ（MediaPipe Pose Landmarker）
 
 > **HaritoraX2ユーザーへ**: HaritoraX2はOSCプロトコルを直接使用しません。SlimeTora → SlimeVR Server → OSC出力の経路で接続します。詳細なセットアップは [docs/haritora-setup-guide.md](docs/haritora-setup-guide.md)、プロトコル仕様は [docs/haritora-protocol.md](docs/haritora-protocol.md) を参照。
 >
+> **BLE 直接接続 (experimental)**: `--receiver ble` で SlimeTora + SlimeVR Server を介さずに HaritoraX2 と直接通信できます（実機動作検証はこれから）。詳細は [docs/ble-direct-guide.md](docs/ble-direct-guide.md)。
+>
 > **その他のトラッカー (SlimeVR native / Tundra / 他)**: SlimeVR Server経由でOSC出力できるトラッカーは原理的に動作するはずです。対応状況と動作報告は [docs/other-trackers.md](docs/other-trackers.md) を参照。
 
 ## インストール

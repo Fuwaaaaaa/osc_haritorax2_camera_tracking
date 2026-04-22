@@ -6,7 +6,7 @@ or command-line arguments.
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import paths
@@ -39,11 +39,23 @@ class TrackingConfig:
     camera_resolution: tuple[int, int] = (640, 480)
     target_fps: int = 30
 
+    # IMU receiver selector ("osc" or "ble"). Defaults to "osc" for
+    # backward compatibility with existing SlimeTora/SlimeVR setups.
+    receiver_type: str = "osc"
+
     # OSC settings (SlimeTora → SlimeVR Server → OSC)
     osc_receive_host: str = "127.0.0.1"
     osc_receive_port: int = 6969
     osc_send_host: str = "127.0.0.1"
     osc_send_port: int = 9000
+
+    # BLE settings (direct HaritoraX2 connection — experimental).
+    # Only used when receiver_type == "ble". ble_local_name_to_bone maps
+    # each tracker peripheral's advertised name (discovered via the
+    # `ble_scan` tool) to the skeleton bone it represents.
+    ble_device_name_prefix: str = "HaritoraX2-"
+    ble_scan_timeout_sec: float = 10.0
+    ble_local_name_to_bone: dict[str, str] = field(default_factory=dict)
 
     # Calibration
     calibration_file: str = "calibration_data/stereo_calib.npz"
