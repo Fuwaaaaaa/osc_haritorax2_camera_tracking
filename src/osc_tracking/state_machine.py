@@ -118,7 +118,7 @@ class TrackingStateMachine:
             # (cleared on the active→inactive transition above).
         # In deadband (exit_threshold <= pitch < pitch_threshold): no change
 
-    def on_osc_received(self) -> None:
+    def on_imu_received(self) -> None:
         """Call when an OSC message is received from the IMU tracker."""
         was_disconnected = self.mode == TrackingMode.IMU_DISCONNECTED
         self._last_osc_time = time.monotonic()

@@ -75,7 +75,7 @@ def main():
             loop_start = time.monotonic()
 
             frame = simulator.generate_frame(dt)
-            sm.on_osc_received()
+            sm.on_imu_received()
 
             confidences = [conf for _, _, conf in frame.values()]
             avg_conf = sum(confidences) / len(confidences) if confidences else 0

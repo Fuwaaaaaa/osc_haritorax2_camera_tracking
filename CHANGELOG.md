@@ -2,10 +2,24 @@
 
 ## Unreleased
 
-### Changed
-- **汎用IMUミドルウェアへのリブランド（文言統一パス）**: docstring / CLI help / 通知 / setup wizard / README / QUICKSTART / DESIGN から HaritoraX2 特権化表現を除去し、OSC対応IMUトラッカー汎用 framing に統一。HaritoraX2 は「最初の対応デバイス」として位置付け。コード動作は不変
-
 ### Added
+- **BLE 直接接続レシーバ (experimental)**: `--receiver ble` で SlimeTora + SlimeVR Server を介さず HaritoraX2 に直接接続。`bleak` 依存、asyncio を背景スレッドで動かして既存の threaded アーキテクチャに橋渡し。Sensor characteristic (`00dbf1c6-...`) を購読し 4× int16LE クォータニオンを復号（haritorax-interpreter 仕様準拠、z/w 符号反転）。実機検証はまだ — 動作報告求む
+- **`src/osc_tracking/ble_receiver.py`** + **`tools/ble_scan.py`**: BLE レシーバ実装と、HaritoraX2 peripheral を列挙するディスカバリツール
+- **`src/osc_tracking/receiver_protocol.py`**: OSC / BLE / 将来の Serial で共有する `IMUReceiver` Protocol (`@runtime_checkable`)
+- **`src/osc_tracking/tracker_mapping.py`**: HaritoraX2 native label と SlimeVR OSC index の対応を一元化、OSCReceiver / BLEReceiver 両方から再利用
+- **`docs/ble-direct-guide.md`**: BLE 直接接続のセットアップ手順と EXPERIMENTAL 注記
+- **設定項目**: `receiver_type`, `ble_device_name_prefix`, `ble_scan_timeout_sec`, `ble_local_name_to_bone`
+- **CLI フラグ**: `--receiver {osc,ble}`, `--ble-device NAME`
+
+### Changed
+- **state_machine**: `on_osc_received()` → `on_imu_received()` にリネーム（受信経路に依存しない命名に）。fusion_engine.py、tools/simulate.py、テスト追随
+- **FusionEngine**: `receiver` 引数型を `OSCReceiver` から `IMUReceiver` protocol に
+- **OSCReceiver**: `DEFAULT_BONE_ADDRESSES` を `tracker_mapping.slimevr_osc_addresses()` 由来に（BLE 側と DRY）
+- **汎用IMUミドルウェアへのリブランド（文言統一パス）**: docstring / CLI help / 通知 / setup wizard / README / QUICKSTART / DESIGN から HaritoraX2 特権化表現を除去し、OSC対応IMUトラッカー汎用 framing に統一。HaritoraX2 は「最初の対応デバイス」として位置付け。コード動作は不変
+- **pyproject.toml**: `bleak>=0.21,<1.0` を dependencies に追加
+- **build_exe.py**: PyInstaller hidden imports に `bleak.backends.winrt.*` を追加
+
+### Added (既出)
 - **`docs/other-trackers.md`**: SlimeVR native / Tundra / その他 SlimeVR-Server 互換トラッカーの対応マトリクス。"動作報告求む" ステータスと Issue テンプレートで community PR 受け入れ体制を明示
 
 ## v0.2.2 (2026-04-14) — Hardening & Rebrand

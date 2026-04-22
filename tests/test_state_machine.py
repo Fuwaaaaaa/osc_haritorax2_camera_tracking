@@ -74,7 +74,7 @@ class TestIMUDisconnection:
         sm.update(0.9, 0.9)
         assert sm.mode == TrackingMode.IMU_DISCONNECTED
 
-        sm.on_osc_received()
+        sm.on_imu_received()
         assert sm.is_resyncing
 
     def test_resync_expires(self, sm):
