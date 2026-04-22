@@ -10,7 +10,7 @@ OSC対応IMUトラッカーと2台のWebカメラ（MediaPipe Pose Landmarker）
 
 ## 特徴
 
-- **布団から出た瞬間にドリフトゼロ復帰**: 布団内ではIMU回転で追従し、カメラ復帰時に蓄積ドリフトを即座に補正。HaritoraX2単体で30分使うとヘディングが数十度ずれるが、このシステムならゼロに戻る
+- **布団から出た瞬間にドリフトゼロ復帰**: 布団内ではIMU回転で追従し、カメラ復帰時に蓄積ドリフトを即座に補正。一般的なIMUトラッカーは単体で30分使うとヘディングが数十度ずれるが（例: HaritoraX2）、このシステムならゼロに戻る
 - **磁気ぐねり耐性**: Visual Compassがカメラの肩ラインでIMUヘディングを補正。磁石やPCの近くでも安定
 - **長時間安定**: 相補フィルタ（Slerp回転ブレンド）が毎フレームドリフトを補正
 - **2台カメラ三角測量**: ステレオキャリブレーションで精度の高い3D座標推定。死角を低減
@@ -26,9 +26,9 @@ OSC対応IMUトラッカーと2台のWebカメラ（MediaPipe Pose Landmarker）
 - Webカメラ x 2
 - Windows（VRChat推奨）
 
-> **HaritoraX2ユーザーへ**: HaritoraX2はOSCプロトコルを直接使用しません。SlimeTora → SlimeVR Server → OSC出力の経路で接続します。詳細は `docs/haritora-protocol.md` を参照。
+> **HaritoraX2ユーザーへ**: HaritoraX2はOSCプロトコルを直接使用しません。SlimeTora → SlimeVR Server → OSC出力の経路で接続します。詳細なセットアップは [docs/haritora-setup-guide.md](docs/haritora-setup-guide.md)、プロトコル仕様は [docs/haritora-protocol.md](docs/haritora-protocol.md) を参照。
 >
-> **その他のトラッカー**: SlimeVR Server経由でOSC出力できるトラッカーなら動作する可能性があります。対応状況は[Issues](https://github.com/Fuwaaaaaa/osc_haritorax2_camera_tracking/issues)で報告してください。
+> **その他のトラッカー (SlimeVR native / Tundra / 他)**: SlimeVR Server経由でOSC出力できるトラッカーは原理的に動作するはずです。対応状況と動作報告は [docs/other-trackers.md](docs/other-trackers.md) を参照。
 
 ## インストール
 

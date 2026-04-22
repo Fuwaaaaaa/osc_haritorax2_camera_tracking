@@ -2,7 +2,7 @@
 
 > **ヒント:** 初回の方は `python -m osc_tracking.tools.setup_wizard` で7ステップのガイド付きセットアップも利用できます。
 
-## 事前準備（HaritoraX2不要）
+## 事前準備（IMUトラッカーなしでテスト可能）
 
 ### 1. 依存関係インストール
 ```bash
@@ -36,9 +36,11 @@ python -m osc_tracking.tools.calibrate --cam1 0 --cam2 1
 
 ---
 
-## HaritoraX2 テスト手順
+## IMUトラッカー接続手順（HaritoraX2 を例に）
 
-### 方法A: SlimeTora経由（推奨）
+> **他のトラッカー (SlimeVR native / Tundra 等)**: SlimeVR Server を経由するなら原理的にそのまま動作します。詳しくは [docs/other-trackers.md](docs/other-trackers.md) を参照。
+
+### 方法A: SlimeTora経由（HaritoraX2 推奨）
 
 > **詳細ガイド:** [docs/haritora-setup-guide.md](docs/haritora-setup-guide.md) にスクリーンショット付きの手順があります。
 
@@ -73,13 +75,13 @@ python -m osc_tracking.tools.osc_monitor
 
 ## テスト項目チェックリスト
 
-### カメラのみテスト（HaritoraX2不要）
+### カメラのみテスト（IMUトラッカー不要）
 - [ ] `preview` で2台のカメラにランドマークが表示される
 - [ ] キャリブレーション完了（または単眼フォールバック確認）
 - [ ] `main` 起動でカメラサブプロセスが動く
 
-### HaritoraX2テスト
-- [ ] SlimeToraでHaritoraX2に接続成功
+### IMUトラッカーテスト（HaritoraX2 を例に）
+- [ ] SlimeToraでHaritoraX2に接続成功（他デバイスは該当ドライバ/SlimeVR Server で接続）
 - [ ] `osc_monitor` でOSCデータ受信確認
 - [ ] `main` 起動でフュージョンが動く
 - [ ] VRChatでアバターが動く

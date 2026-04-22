@@ -2,7 +2,7 @@
 
 Uses MediaPipe shoulder landmarks (#11 left, #12 right) to compute the
 camera-space yaw angle, then overrides the magnetometer-derived heading
-component of the HaritoraX2 chest tracker.
+component of the chest-mounted IMU tracker (e.g., HaritoraX2, SlimeVR).
 
 When shoulders are not visible (Partial/Full Occlusion), Visual Compass
 is suspended and the IMU heading is used with increased uncertainty.

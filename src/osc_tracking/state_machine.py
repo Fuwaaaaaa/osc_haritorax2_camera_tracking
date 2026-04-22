@@ -119,7 +119,7 @@ class TrackingStateMachine:
         # In deadband (exit_threshold <= pitch < pitch_threshold): no change
 
     def on_osc_received(self) -> None:
-        """Call when an OSC message is received from HaritoraX2."""
+        """Call when an OSC message is received from the IMU tracker."""
         was_disconnected = self.mode == TrackingMode.IMU_DISCONNECTED
         self._last_osc_time = time.monotonic()
         if was_disconnected:

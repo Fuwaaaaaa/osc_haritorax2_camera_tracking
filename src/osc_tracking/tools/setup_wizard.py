@@ -64,10 +64,11 @@ WIZARD_STEPS = [
     ),
     WizardStep(
         number=3,
-        title="SlimeTora + SlimeVR Server接続",
+        title="SlimeVR Server接続",
         description=(
-            "HaritoraX2のIMUデータを受信するために、SlimeToraとSlimeVR Serverが"
-            "起動していることを確認します。"
+            "OSC対応IMUトラッカー（例: HaritoraX2）のデータを受信するために、"
+            "SlimeVR Serverが起動していることを確認します。"
+            "HaritoraX2の場合はSlimeToraも必要。"
         ),
     ),
     WizardStep(
@@ -141,7 +142,7 @@ def check_osc_port_available(port: int) -> bool:
 def _print_header() -> None:
     print(f"\n{CYAN}{'=' * 55}")
     print("  OSC Tracking セットアップウィザード")
-    print("  HaritoraX2 + デュアルWebカメラ")
+    print("  OSC IMUトラッカー + デュアルWebカメラ")
     print(f"{'=' * 55}{RESET}\n")
     print("  初回セットアップを7ステップでガイドします。")
     print("  各ステップで必要なものが揃っているか確認します。\n")
@@ -214,15 +215,16 @@ def _run_step_2_cameras(cam1: int, cam2: int) -> bool:
 def _run_step_3_slimevr() -> bool:
     """Step 3: Guide user to set up SlimeTora + SlimeVR."""
     print(f"\n      {BOLD}必要なソフトウェア:{RESET}")
-    print("      1. SlimeTora — HaritoraX2をSlimeVRに接続")
-    print("         https://github.com/OCSYT/SlimeTora")
-    print("      2. SlimeVR Server — OSCでデータを出力")
+    print("      1. SlimeVR Server — OSCでデータを出力")
     print("         https://slimevr.dev/download")
+    print("      2. (HaritoraX2の場合) SlimeTora — HaritoraX2をSlimeVRに接続")
+    print("         https://github.com/OCSYT/SlimeTora")
+    print("      ※ SlimeVR native / Tundra 等は SlimeVR Server 直接で OK")
     print()
     print(f"      {BOLD}手順:{RESET}")
-    print("      1. HaritoraX2の電源を入れる")
-    print("      2. SlimeToraを起動し、トラッカーが接続されるのを確認")
-    print("      3. SlimeVR Serverを起動")
+    print("      1. トラッカーの電源を入れる")
+    print("      2. (HaritoraX2の場合) SlimeToraを起動し、トラッカーが接続されるのを確認")
+    print("      3. SlimeVR Serverを起動し、トラッカーが認識されることを確認")
     print("      4. SlimeVR Serverの設定でOSC出力を有効化（ポート6969）")
     print()
     _wait_for_enter("  準備ができたらEnterで続行...")

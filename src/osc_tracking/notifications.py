@@ -68,10 +68,10 @@ class NotificationManager:
             self._show_popup(message, level)
 
     def notify_disconnect(self) -> None:
-        self.notify("HaritoraX2 disconnected", NotificationType.WARNING, "imu_disconnect")
+        self.notify("IMU tracker disconnected", NotificationType.WARNING, "imu_disconnect")
 
     def notify_reconnect(self) -> None:
-        self.notify("HaritoraX2 reconnected", NotificationType.INFO, "imu_reconnect")
+        self.notify("IMU tracker reconnected", NotificationType.INFO, "imu_reconnect")
 
     def notify_camera_lost(self, cam_id: int) -> None:
         self.notify(f"Camera {cam_id} lost", NotificationType.WARNING, f"cam_{cam_id}_lost")

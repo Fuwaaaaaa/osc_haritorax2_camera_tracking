@@ -4,8 +4,8 @@ Usage:
     python -m osc_tracking.tools.osc_monitor [--port 6969]
 
 Shows all OSC messages received, useful for:
-- Verifying SlimeTora/SlimeVR Server OSC output
-- Discovering HaritoraX2 address patterns
+- Verifying SlimeVR Server OSC output (HaritoraX2 via SlimeTora, SlimeVR native, Tundra, etc.)
+- Discovering OSC address patterns from any IMU tracker
 - Confirming quaternion data format
 """
 

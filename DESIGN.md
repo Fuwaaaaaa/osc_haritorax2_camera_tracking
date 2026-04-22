@@ -1,8 +1,8 @@
 # Design System — OSC Tracking
 
 ## Product Context
-- **What this is:** HaritoraX2 + デュアルWebカメラのセンサーフュージョンによるVRフルボディトラッキングシステム
-- **Who it's for:** HaritoraX2ユーザー、VRChatフルボディトラッカー、日本のVRコミュニティ
+- **What this is:** OSC対応IMUトラッカー + デュアルWebカメラのセンサーフュージョンによるVRフルボディトラッキングミドルウェア。HaritoraX2 が最初の対応デバイス
+- **Who it's for:** VRフルボディトラッキングユーザー（HaritoraX2 / SlimeVR / Tundra 等）、VRChatコミュニティ、日本のVRコミュニティ
 - **Space/industry:** VR body tracking, IMU sensor fusion
 - **Project type:** デスクトップツール（Webダッシュボード + システムトレイ + CLI）
 

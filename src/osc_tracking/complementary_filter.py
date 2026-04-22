@@ -36,9 +36,9 @@ class JointState:
     initialized: bool = False
 
 
-# Tracked joints — matches HaritoraX2 tracker layout + camera-derived joints.
-# HaritoraX2 provides: Hips, Chest, LeftFoot, RightFoot,
-#                       LeftKnee, RightKnee, LeftElbow, RightElbow
+# Tracked joints — matches the typical 8-tracker IMU layout (e.g. HaritoraX2).
+# IMU side provides: Hips, Chest, LeftFoot, RightFoot,
+#                     LeftKnee, RightKnee, LeftElbow, RightElbow
 # Camera provides: Head (via MediaPipe face landmarks)
 JOINT_NAMES = [
     "Hips", "Chest", "Head",
@@ -96,7 +96,7 @@ class ComplementaryFilter:
         Args:
             joint_name: One of JOINT_NAMES.
             camera_position: 3D position from stereo triangulation, or None.
-            imu_rotation: Quaternion rotation from HaritoraX2, or None.
+            imu_rotation: Quaternion rotation from the IMU tracker, or None.
             confidence: Combined camera confidence (0.0-1.0).
             dt: Time delta since last update in seconds.
 

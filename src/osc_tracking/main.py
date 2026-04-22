@@ -75,7 +75,7 @@ RESET = "\033[0m"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="OSC Tracking  - HaritoraX2 + Dual WebCam")
+    parser = argparse.ArgumentParser(description="OSC Tracking - IMU Tracker + Dual WebCam Sensor Fusion")
     parser.add_argument("--config", type=str, help="Path to config JSON file")
     parser.add_argument("--cam1", type=int, help="Camera 1 index")
     parser.add_argument("--cam2", type=int, help="Camera 2 index")

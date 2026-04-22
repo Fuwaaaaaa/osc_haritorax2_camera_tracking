@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **汎用IMUミドルウェアへのリブランド（文言統一パス）**: docstring / CLI help / 通知 / setup wizard / README / QUICKSTART / DESIGN から HaritoraX2 特権化表現を除去し、OSC対応IMUトラッカー汎用 framing に統一。HaritoraX2 は「最初の対応デバイス」として位置付け。コード動作は不変
+
+### Added
+- **`docs/other-trackers.md`**: SlimeVR native / Tundra / その他 SlimeVR-Server 互換トラッカーの対応マトリクス。"動作報告求む" ステータスと Issue テンプレートで community PR 受け入れ体制を明示
+
 ## v0.2.2 (2026-04-14) — Hardening & Rebrand
 
 ### Changed

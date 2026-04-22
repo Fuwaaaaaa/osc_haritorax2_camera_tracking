@@ -102,8 +102,8 @@ def main() -> None:
         print(f"  {RED}NO MESSAGES RECEIVED{RESET}")
         print()
         print("  Troubleshooting:")
-        print("  1. Is SlimeTora running and connected to HaritoraX2?")
-        print("  2. Is SlimeVR Server running?")
+        print("  1. (HaritoraX2) Is SlimeTora running and connected to your trackers?")
+        print("  2. Is SlimeVR Server running and recognizing your trackers?")
         print("  3. Is SlimeVR Server configured to output OSC on port", args.port, "?")
         print("  4. Is another program using port", args.port, "?")
         sys.exit(1)
@@ -138,7 +138,7 @@ def main() -> None:
         print(f"  {GREEN}HEALTH: GOOD  - {len(rotation_addresses)} rotation trackers detected{RESET}")
     elif len(rotation_addresses) >= 1:
         print(f"  {YELLOW}HEALTH: PARTIAL  - only {len(rotation_addresses)} rotation trackers{RESET}")
-        print("  Expected 8 trackers from HaritoraX2")
+        print("  Expected 6-8 trackers (e.g. HaritoraX2 is 8)")
     else:
         print(f"  {RED}HEALTH: NO ROTATION DATA  - check SlimeVR Server OSC config{RESET}")
 

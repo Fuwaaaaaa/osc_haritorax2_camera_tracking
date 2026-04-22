@@ -5,9 +5,9 @@
 
 ## 必要機材
 
-- HaritoraX2（充電済み）
+- HaritoraX2（充電済み） or その他 SlimeVR-Server 互換 IMU トラッカー
 - Webカメラ x 2（USB接続済み）
-- SlimeTora（インストール済み）
+- SlimeTora（HaritoraX2 の場合はインストール済み）
 - SlimeVR Server（インストール済み）
 - Windows PC（VRChat推奨だがなくてもOK）
 

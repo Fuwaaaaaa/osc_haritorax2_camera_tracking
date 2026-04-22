@@ -1,15 +1,16 @@
-"""OSC receiver for HaritoraX2 tracker data.
+"""OSC receiver for IMU tracker data.
 
-Receives rotation quaternion data from HaritoraX2 via OSC protocol.
-The actual OSC address patterns and data format should be documented
-in docs/haritora-osc-format.md after Phase 0 investigation.
+Receives rotation quaternion data from any OSC-compatible IMU tracker.
+Tested with HaritoraX2 via SlimeTora → SlimeVR Server; other
+SlimeVR-Server-compatible trackers (SlimeVR native, Tundra, etc.) use
+the same address pattern and should work without code changes.
 
 Architecture:
-    HaritoraX2 ──UDP/OSC──► OSCReceiver ──► FusionEngine
-                              │
-                         Parses quaternion
-                         per bone, tracks
-                         last-received time
+    IMU tracker ──UDP/OSC──► OSCReceiver ──► FusionEngine
+                                │
+                           Parses quaternion
+                           per bone, tracks
+                           last-received time
 """
 
 import logging
@@ -33,16 +34,16 @@ class BoneData:
 
 
 class OSCReceiver:
-    """Receives and parses HaritoraX2 OSC messages.
+    """Receives and parses IMU tracker OSC messages.
 
-    NOTE: The default OSC address patterns below are placeholders.
-    Phase 0 will capture actual HaritoraX2 messages and update these.
+    Expects SlimeVR Server OSC output format (see DEFAULT_TRACKER_MAP).
+    Works with any tracker that routes through SlimeVR Server, including
+    HaritoraX2 via SlimeTora, SlimeVR native trackers, and Tundra Labs.
     """
 
-    # HaritoraX2 tracker mapping.
-    # HaritoraX2 communicates via BLE/Serial, NOT OSC directly.
-    # Use SlimeTora → SlimeVR Server → OSC output as the bridge.
-    # SlimeVR Server OSC output uses tracker indices.
+    # SlimeVR Server OSC output mapping (tracker indices 1-8).
+    # HaritoraX2 reaches this path via SlimeTora → SlimeVR Server.
+    # SlimeVR native / Tundra reach it directly from SlimeVR Server.
     #
     # HaritoraX2 native tracker names:
     #   chest, hip, rightElbow, leftElbow,

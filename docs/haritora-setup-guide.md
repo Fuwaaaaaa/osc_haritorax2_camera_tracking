@@ -1,5 +1,7 @@
 # HaritoraX2 実機テストセットアップガイド
 
+> 他の OSC-compatible IMU トラッカー（SlimeVR native / Tundra 等）については [other-trackers.md](other-trackers.md) を参照。
+
 HaritoraX2をOSC Trackingで使うための接続経路:
 
 ```
