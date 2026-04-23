@@ -246,3 +246,222 @@ def compute_reprojection_error(
     err2 = float(np.mean(np.linalg.norm(proj2 - points_cam2, axis=1)))
 
     return (err1 + err2) / 2.0
+
+
+# ---------------------------------------------------------------------------
+# Multi-view (3+ cameras) triangulation
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CameraView:
+    """One camera's contribution to a multi-view rig.
+
+    ``R_world`` and ``T_world`` place the camera in the shared world frame
+    — the world frame is defined as camera 0's frame (``R = I``, ``T = 0``)
+    in :func:`multiview_from_stereo`, matching how stereo triangulation
+    already returns points in camera 1's frame.
+    """
+
+    K: np.ndarray              # intrinsic (3x3)
+    D: np.ndarray              # distortion coefficients
+    R_world: np.ndarray        # world → camera rotation (3x3)
+    T_world: np.ndarray        # world → camera translation (3x1)
+
+    @property
+    def P(self) -> np.ndarray:
+        """Projection matrix K [R | T] (3x4)."""
+        Rt = np.hstack([self.R_world, self.T_world.reshape(3, 1)])
+        return np.asarray(self.K @ Rt)
+
+
+@dataclass
+class MultiViewCalibration:
+    """Calibration for N ≥ 2 cameras observing a shared scene.
+
+    All camera poses are expressed relative to ``views[0]`` — that camera
+    has ``R = I`` and ``T = 0``, and triangulated points come back in its
+    coordinate frame. The 2-camera case is equivalent to the existing
+    :class:`StereoCalibration`; see :func:`multiview_from_stereo`.
+    """
+
+    views: list[CameraView]
+    image_size: tuple[int, int]
+    reprojection_error: float = 0.0
+
+    @property
+    def camera_count(self) -> int:
+        return len(self.views)
+
+
+def multiview_from_stereo(calib: StereoCalibration) -> MultiViewCalibration:
+    """Promote a StereoCalibration to a 2-camera MultiViewCalibration.
+
+    Camera 0 sits at the world origin; camera 1 picks up ``(R, T)`` from
+    the stereo rig. This keeps the 2-camera code path identical in
+    behavior while letting the same triangulator handle any N.
+    """
+    view0 = CameraView(
+        K=calib.K1,
+        D=calib.D1,
+        R_world=np.eye(3),
+        T_world=np.zeros(3),
+    )
+    view1 = CameraView(
+        K=calib.K2,
+        D=calib.D2,
+        R_world=calib.R,
+        T_world=calib.T.reshape(3),
+    )
+    return MultiViewCalibration(
+        views=[view0, view1],
+        image_size=calib.image_size,
+        reprojection_error=calib.reprojection_error,
+    )
+
+
+def triangulate_multiview(
+    calib: MultiViewCalibration,
+    points_per_view: list[np.ndarray],
+    confidences_per_view: list[np.ndarray] | None = None,
+) -> np.ndarray:
+    """Triangulate Nx3 world points from N camera views using SVD-based DLT.
+
+    For each 3D point X observed at (u_i, v_i) in camera i with projection
+    matrix P_i, two linear constraints apply::
+
+        u_i * P_i[2,:] - P_i[0,:] = 0
+        v_i * P_i[2,:] - P_i[1,:] = 0
+
+    Stacking these across all views gives a ``(2K) x 4`` homogeneous system
+    whose null-space recovers the 3D point. Points visible in fewer than
+    two cameras (or whose system is otherwise degenerate) come back as NaN
+    so downstream sanity checks reject them cleanly.
+
+    Args:
+        calib: multi-view rig (K camera views in shared world frame).
+        points_per_view: length-K list of Nx2 arrays — the same N points
+            observed in each camera in the same order. Entries may be NaN
+            (or zero-confidence, see below) for views that did not see a
+            given point.
+        confidences_per_view: optional length-K list of length-N arrays
+            with per-observation confidences in [0, 1]. Views contributing
+            <= 0 confidence drop out of the system for that point.
+
+    Returns:
+        Nx3 array of 3D points in the world frame defined by ``calib.views[0]``.
+    """
+    if len(points_per_view) != calib.camera_count:
+        raise ValueError(
+            f"Expected {calib.camera_count} point arrays, got {len(points_per_view)}"
+        )
+    if calib.camera_count < 2:
+        raise ValueError("Multi-view triangulation requires at least 2 cameras")
+
+    n_points = points_per_view[0].shape[0]
+    for arr in points_per_view:
+        if arr.shape[0] != n_points:
+            raise ValueError("All views must supply the same number of points")
+
+    if confidences_per_view is None:
+        confidences_per_view = [
+            np.ones(n_points, dtype=np.float64) for _ in calib.views
+        ]
+
+    # Undistort each view's points up-front so each call to cv2 happens
+    # once per view per call rather than once per point.
+    undistorted_per_view: list[np.ndarray] = []
+    for view, pts in zip(calib.views, points_per_view):
+        pts_reshaped = pts.reshape(-1, 1, 2).astype(np.float64)
+        undist = cv2.undistortPoints(pts_reshaped, view.K, view.D, P=view.K)
+        undistorted_per_view.append(undist.reshape(-1, 2))
+
+    projection_matrices = [view.P for view in calib.views]
+
+    out = np.full((n_points, 3), np.nan, dtype=np.float64)
+    for pt_idx in range(n_points):
+        rows: list[np.ndarray] = []
+        for view_idx, (P, undist, conf) in enumerate(
+            zip(projection_matrices, undistorted_per_view, confidences_per_view)
+        ):
+            w = float(conf[pt_idx])
+            if not (w > 0.0):
+                continue
+            uv = undist[pt_idx]
+            if not np.all(np.isfinite(uv)):
+                continue
+            u, v = float(uv[0]), float(uv[1])
+            sqrt_w = float(np.sqrt(w))
+            rows.append(sqrt_w * (u * P[2, :] - P[0, :]))
+            rows.append(sqrt_w * (v * P[2, :] - P[1, :]))
+        if len(rows) < 4:
+            # Need at least 2 views (4 rows) for a well-posed system.
+            continue
+        A = np.stack(rows, axis=0)
+        try:
+            _, _, vt = np.linalg.svd(A)
+        except np.linalg.LinAlgError:
+            continue
+        X = vt[-1]
+        if abs(X[3]) < 1e-9:
+            continue
+        out[pt_idx] = X[:3] / X[3]
+
+    return out
+
+
+def save_multiview_calibration(
+    calib: MultiViewCalibration, path: str | Path
+) -> None:
+    """Save a multi-view calibration to .npz.
+
+    The saved file embeds the camera count in the array names (``K0``,
+    ``D0``, ``R0``, ``T0``, ``K1``, …) so the reader can enumerate views
+    without needing a separate index.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    arrays: dict[str, np.ndarray] = {
+        "camera_count": np.array(calib.camera_count),
+        "image_size": np.array(calib.image_size),
+        "reprojection_error": np.array(calib.reprojection_error),
+    }
+    for i, view in enumerate(calib.views):
+        arrays[f"K{i}"] = view.K
+        arrays[f"D{i}"] = view.D
+        arrays[f"R{i}"] = view.R_world
+        arrays[f"T{i}"] = view.T_world
+    np.savez(path, **arrays)
+    logger.info("Multi-view calibration saved to %s (%d cameras)", path, calib.camera_count)
+
+
+def load_multiview_calibration(path: str | Path) -> MultiViewCalibration | None:
+    """Load a multi-view calibration written by :func:`save_multiview_calibration`.
+
+    ``allow_pickle=False`` matches :func:`load_calibration` — the loader
+    refuses object arrays so a config-supplied path cannot smuggle in a
+    pickle payload.
+    """
+    path = Path(path)
+    if not path.exists():
+        return None
+    try:
+        data = np.load(path, allow_pickle=False)
+        n = int(data["camera_count"])
+        views = [
+            CameraView(
+                K=data[f"K{i}"],
+                D=data[f"D{i}"],
+                R_world=data[f"R{i}"],
+                T_world=data[f"T{i}"],
+            )
+            for i in range(n)
+        ]
+        return MultiViewCalibration(
+            views=views,
+            image_size=tuple(data["image_size"]),
+            reprojection_error=float(data["reprojection_error"]),
+        )
+    except Exception:
+        logger.warning("Failed to load multi-view calibration from %s", path)
+        return None
