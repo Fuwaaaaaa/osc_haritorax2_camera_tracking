@@ -15,16 +15,49 @@ _state: dict = {}
 _config_ref = None
 _lock = threading.Lock()
 
+# Cap POST bodies so a local process claiming a huge Content-Length can't
+# pin the rest-api thread on a long blocking read. 64 KiB is ~1000x any
+# legitimate control payload we send.
+MAX_REQUEST_BODY = 65_536
+
+# Config fields safe to expose to dashboards. Anything carrying paths,
+# hostnames, or COM port names stays server-side so a page loaded in the
+# user's browser on any site can't exfiltrate it via the CORS-open
+# GET /api/config endpoint.
+_CONFIG_PUBLIC_FIELDS = frozenset({
+    "target_fps",
+    "camera_resolution",
+    "visible_threshold",
+    "partial_threshold",
+    "smooth_rate",
+    "compass_blend_factor",
+    "pose_predictor_enabled",
+    "refine_triangulation",
+    "receiver_type",
+    "cam_indices",
+    "cam1_index",
+    "cam2_index",
+    "futon_pitch_threshold",
+    "futon_exit_threshold",
+    "futon_dwell_time_sec",
+    "futon_trigger_joint",
+})
+
+
+def _public_config_view(config: object) -> dict:
+    """Return only the config fields safe for cross-origin readers."""
+    if config is None:
+        return {}
+    attrs = getattr(config, "__dict__", {})
+    return {k: v for k, v in attrs.items() if k in _CONFIG_PUBLIC_FIELDS}
+
 
 class APIHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/status":
             self._json_response(_state)
         elif self.path == "/api/config":
-            if _config_ref:
-                self._json_response(_config_ref.__dict__)
-            else:
-                self._json_response({})
+            self._json_response(_public_config_view(_config_ref))
         elif self.path == "/api/joints":
             with _lock:
                 self._json_response(_state.get("joints", {}))
@@ -36,8 +69,11 @@ class APIHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         # Drain the request body regardless of what we do with it — on
         # Windows, responding before reading causes the client to see
-        # a connection abort rather than the HTTP status.
-        length = int(self.headers.get("Content-Length", 0))
+        # a connection abort rather than the HTTP status. Cap the read
+        # at MAX_REQUEST_BODY so a bogus Content-Length can't occupy
+        # the handler thread on a multi-gigabyte stream.
+        declared = int(self.headers.get("Content-Length", 0))
+        length = min(declared, MAX_REQUEST_BODY)
         if length > 0:
             try:
                 self.rfile.read(length)

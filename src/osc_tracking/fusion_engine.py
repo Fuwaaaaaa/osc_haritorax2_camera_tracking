@@ -46,6 +46,7 @@ from .domain.events import (
     OcclusionDetected,
     TrackingModeChanged,
 )
+from .motion_smoothing import SmoothingPreset
 from .osc_sender import OSCSender, TrackerOutput
 from .pose_predictor import VelocityPredictor
 from .receiver_protocol import IMUReceiver
@@ -321,6 +322,17 @@ class FusionEngine:
     def snapshot(self) -> SkeletonSnapshot:
         """Return an immutable frame snapshot for observers."""
         return self.skeleton.snapshot()
+
+    def apply_smoothing_preset(self, preset: SmoothingPreset) -> None:
+        """Apply a motion-smoothing preset to the underlying filter.
+
+        Callers used to write ``engine.filter.SMOOTH_RATE`` directly,
+        which coupled them to the class-attribute names on
+        ``ComplementaryFilter``. Going through this method lets the
+        filter evolve internally without breaking the main loop.
+        """
+        self.filter.SMOOTH_RATE = preset.smooth_rate
+        self.filter.DRIFT_VELOCITY_THRESHOLD = preset.noise_threshold
 
     def start(self) -> None:
         """Start all subsystems."""

@@ -94,6 +94,93 @@ def _snapshot_to_joint_dict(snapshot) -> dict:
     }
 
 
+def _joint_positions(snap) -> dict:
+    return {bone.name: js.position.to_array() for bone, js in snap.joints.items()}
+
+
+def _avg_confidence(snap) -> float:
+    confs = [float(js.confidence) for js in snap.joints.values()]
+    return sum(confs) / len(confs) if confs else 0.0
+
+
+def _joint_confidence_dict(snap) -> dict:
+    return {bone.name: {"conf": float(js.confidence)} for bone, js in snap.joints.items()}
+
+
+def _pos_rot_dict(snap) -> dict:
+    return {bone.name: (js.position.to_array(), js.rotation) for bone, js in snap.joints.items()}
+
+
+# Per-subsystem FrameProcessed handlers. Each one takes the concrete
+# subsystem and the event, so ``functools.partial(handler, subsystem)``
+# produces a one-argument callable the EventBus can dispatch. Keeping
+# them module-level (rather than inside a closure) lets a new subsystem
+# be added by defining one more handler and one more bus.subscribe call
+# in _wire_event_subscribers — the main loop itself stays untouched.
+
+def _handle_frame_gesture(gesture, event) -> None:
+    positions = _joint_positions(event.snapshot)
+    if not positions:
+        return
+    detected = gesture.update(positions)
+    if detected:
+        logger.info("Gesture detected: %s", detected)
+
+
+def _handle_frame_tray(tray, event) -> None:
+    snap = event.snapshot
+    tray.update(_mode_to_quality_level(snap.mode), snap.mode.name, event.fps)
+
+
+def _handle_frame_dashboard(dashboard, event) -> None:
+    snap = event.snapshot
+    dashboard.update(
+        snap.mode.name, event.fps, _avg_confidence(snap), _joint_confidence_dict(snap)
+    )
+
+
+def _handle_frame_recorder(recorder, event) -> None:
+    snap = event.snapshot
+    if not snap.joints:
+        return
+    recorder.record_frame(_snapshot_to_joint_dict(snap), snap.mode.name)
+
+
+def _handle_frame_vmc(vmc_sender, event) -> None:
+    snap = event.snapshot
+    if not snap.joints:
+        return
+    vmc_sender.send_frame(_pos_rot_dict(snap))
+
+
+def _handle_frame_bvh(bvh, event) -> None:
+    snap = event.snapshot
+    if not snap.joints:
+        return
+    bvh.add_frame(_pos_rot_dict(snap))
+
+
+def _handle_frame_viewer(viewer, event) -> None:
+    positions = _joint_positions(event.snapshot)
+    if not positions:
+        return
+    viewer.update(positions)
+
+
+def _handle_frame_discord(discord, event) -> None:
+    discord.update(event.snapshot.mode.name, event.fps)
+
+
+def _handle_frame_api(api, event) -> None:
+    snap = event.snapshot
+    api.update(snap.mode.name, event.fps, _joint_confidence_dict(snap))
+
+
+def _handle_frame_obs(obs_overlay, event) -> None:
+    snap = event.snapshot
+    obs_overlay.update(snap.mode.name, event.fps, _avg_confidence(snap))
+
+
 def _wire_event_subscribers(
     bus,
     *,
@@ -111,10 +198,13 @@ def _wire_event_subscribers(
 ) -> None:
     """Subscribe each enabled subsystem to the events it cares about.
 
-    Kept as one function so the per-subsystem glue is easy to find and
-    the main loop stays thin. Subsystems that are ``None`` (disabled by
-    CLI flag) are skipped cleanly.
+    Each subsystem that is present gets its own FrameProcessed
+    subscriber via ``functools.partial`` against a module-level
+    handler. Adding a new output is one more handler plus one more
+    ``bus.subscribe`` call — no surgery on a shared on_frame closure.
     """
+    from functools import partial
+
     from .domain.events import (
         FrameProcessed,
         IMUDisconnected,
@@ -122,42 +212,21 @@ def _wire_event_subscribers(
         TrackingModeChanged,
     )
 
-    def on_frame(event: FrameProcessed) -> None:
-        snap = event.snapshot
-        fps = event.fps
-        mode_name = snap.mode.name
-        joint_positions = {bone.name: js.position.to_array() for bone, js in snap.joints.items()}
-        confs = [float(js.confidence) for js in snap.joints.values()]
-        avg_conf = sum(confs) / len(confs) if confs else 0.0
-
-        if gesture and joint_positions:
-            detected = gesture.update(joint_positions)
-            if detected:
-                logger.info("Gesture detected: %s", detected)
-        if tray:
-            tray.update(_mode_to_quality_level(snap.mode), mode_name, fps)
-        if dashboard:
-            joint_data = {b.name: {"conf": float(js.confidence)} for b, js in snap.joints.items()}
-            dashboard.update(mode_name, fps, avg_conf, joint_data)
-        if recorder and snap.joints:
-            recorder.record_frame(_snapshot_to_joint_dict(snap), mode_name)
-        if vmc_sender and snap.joints:
-            vmc_data = {b.name: (js.position.to_array(), js.rotation) for b, js in snap.joints.items()}
-            vmc_sender.send_frame(vmc_data)
-        if bvh and snap.joints:
-            bvh_data = {b.name: (js.position.to_array(), js.rotation) for b, js in snap.joints.items()}
-            bvh.add_frame(bvh_data)
-        if viewer and joint_positions:
-            viewer.update(joint_positions)
-        if discord:
-            discord.update(mode_name, fps)
-        if api:
-            joint_data = {b.name: {"conf": float(js.confidence)} for b, js in snap.joints.items()}
-            api.update(mode_name, fps, joint_data)
-        if obs_overlay:
-            obs_overlay.update(mode_name, fps, avg_conf)
-
-    bus.subscribe(FrameProcessed, on_frame)
+    subsystem_bindings = (
+        (gesture, _handle_frame_gesture),
+        (tray, _handle_frame_tray),
+        (dashboard, _handle_frame_dashboard),
+        (recorder, _handle_frame_recorder),
+        (vmc_sender, _handle_frame_vmc),
+        (bvh, _handle_frame_bvh),
+        (viewer, _handle_frame_viewer),
+        (discord, _handle_frame_discord),
+        (api, _handle_frame_api),
+        (obs_overlay, _handle_frame_obs),
+    )
+    for subsystem, handler in subsystem_bindings:
+        if subsystem is not None:
+            bus.subscribe(FrameProcessed, partial(handler, subsystem))
 
     if notifier is not None:
         def on_mode_changed(event: TrackingModeChanged) -> None:
@@ -406,8 +475,7 @@ def main() -> None:
         logger.info("OSC remap profile: %s", remapper.profile.name)
     if args.smoothing:
         preset = get_preset(args.smoothing)
-        engine.filter.SMOOTH_RATE = preset.smooth_rate
-        engine.filter.DRIFT_VELOCITY_THRESHOLD = preset.noise_threshold
+        engine.apply_smoothing_preset(preset)
         logger.info("Smoothing preset: %s (rate=%.1f)", preset.name, preset.smooth_rate)
 
     notifier = NotificationManager()
