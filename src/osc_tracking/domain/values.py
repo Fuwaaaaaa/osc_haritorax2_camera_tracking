@@ -81,7 +81,7 @@ class Confidence:
 class BoneId:
     """Canonical skeleton bone identifier.
 
-    Validated against :data:`complementary_filter.JOINT_NAMES` at
+    Validated against :data:`osc_tracking.domain.bones.JOINT_NAMES` at
     construction so typos surface at the boundary rather than as a
     silently-missing dict key deep in the fusion loop.
     """
@@ -89,9 +89,7 @@ class BoneId:
     name: str
 
     def __post_init__(self) -> None:
-        # Lazy import to keep domain layer importable before the wider
-        # tracking stack is set up (e.g. in minimal tooling contexts).
-        from osc_tracking.complementary_filter import JOINT_NAMES
+        from osc_tracking.domain.bones import JOINT_NAMES
         if not self.name:
             raise ValueError("BoneId cannot be empty")
         if self.name not in JOINT_NAMES:
@@ -110,5 +108,5 @@ class BoneId:
         directly — prefer this when you need strongly-typed ids instead
         of bare strings.
         """
-        from osc_tracking.complementary_filter import JOINT_NAMES
+        from osc_tracking.domain.bones import JOINT_NAMES
         return [cls(name) for name in JOINT_NAMES]
