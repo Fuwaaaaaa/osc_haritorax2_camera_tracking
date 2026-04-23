@@ -126,11 +126,16 @@ class OSCReceiver(BaseIMUReceiver):
             if norm < 1e-6:
                 return
             quat = [x / norm, y / norm, z / norm, w / norm]
+            # One clock read per handler: the BoneData timestamp and
+            # the receiver's global last-receive time must agree, or
+            # get_bone_rotation's freshness check can misalign with
+            # is_connected by the few microseconds between calls.
+            now = time.monotonic()
             self.bones[bone_name] = BoneData(
                 rotation=Rotation.from_quat(quat),
-                timestamp=time.monotonic(),
+                timestamp=now,
             )
-            self._last_receive_time = time.monotonic()
+            self._last_receive_time = now
         except (ValueError, TypeError):
             pass
 
