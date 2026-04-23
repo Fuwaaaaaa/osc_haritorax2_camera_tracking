@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added (docs)
+- **`docs/slimevr-setup-guide.md`**: SlimeVR native / Tundra Labs / その他 SlimeVR 互換 IMU トラッカー向けのセットアップガイド。OSC 出力有効化、`connection_check` での疎通確認、OSC トラッカー番号マッピングがズレた場合の対処、トラッカー数が 8 未満の場合の挙動を明記。コードは既に device-agnostic なのでガイドのみで対応可能。`docs/other-trackers.md` と `README.md` から新ガイドへリンクを追加
+- **`BaseIMUReceiver` template-method abstract class** (`src/osc_tracking/receiver_base.py`): OSC / BLE / Serial receiver で重複していたライフサイクル (idempotent start, freshness-aware reads, thread join warning) を集約。各 receiver は `_run_loop` / `_prepare_start` / `_on_stop_requested` / `_thread_name` の hook のみ実装。`IMUReceiver` Protocol 非破壊で `FusionEngine` / `main._build_receiver()` に影響なし
+
 ### Added (Tier A/B/C housekeeping & automation)
 - **`OcclusionDetected` event publisher**: FusionEngine が joint-level で visible→occluded 遷移時に `OcclusionDetected(timestamp, bone)` を publish。初回未観測ジョイントは「遷移」扱いせずに false positive を防止
 - **`BoneId.all()` クラスメソッド**: pre-DDD な `JOINT_NAMES` 直接参照を型付き `BoneId` イテレーションに置換可能に
