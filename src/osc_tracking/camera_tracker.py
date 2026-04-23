@@ -115,6 +115,11 @@ class CameraConfig:
     calibration_file: str = "calibration_data/stereo_calib.npz"
     model_path: str = MODEL_PATH_DEFAULT
     model_path_lite: str = MODEL_PATH_LITE
+    # Bundle-adjustment refinement on top of linear DLT triangulation.
+    # Default on for 3+ camera rigs (where the redundancy pays back the
+    # optimisation cost) and off for 2 cameras (DLT is already optimal
+    # there — refinement would only add ms of CPU for no accuracy win).
+    refine_triangulation: bool | None = None
 
     def __post_init__(self) -> None:
         if self.cam_indices is None:
@@ -137,6 +142,19 @@ class CameraConfig:
     @property
     def camera_count(self) -> int:
         return len(self.effective_cam_indices)
+
+    @property
+    def effective_refine_triangulation(self) -> bool:
+        """Resolve the tri-state ``refine_triangulation`` to a bool.
+
+        ``None`` → auto: on iff there are 3+ cameras. Explicit True/False
+        overrides auto, which lets a user force refinement on a 2-camera
+        rig for testing or disable it on a 3-camera rig under tight
+        latency budgets.
+        """
+        if self.refine_triangulation is not None:
+            return self.refine_triangulation
+        return self.camera_count >= 3
 
 
 class CameraTracker:
@@ -418,7 +436,8 @@ def _camera_worker(
                 if any(lms is not None for lms in landmark_sets):
                     with shm_lock:
                         _process_landmarks(
-                            buf, landmark_sets, mv_calib, config.resolution, now
+                            buf, landmark_sets, mv_calib, config.resolution, now,
+                            refine=config.effective_refine_triangulation,
                         )
                 else:
                     with shm_lock:
@@ -517,13 +536,14 @@ def _summarize_visibility_halves(per_view_vis: list[float]) -> tuple[float, floa
     return min(first_half), min(second_half)
 
 
-def _process_landmarks(buf, landmark_sets, mv_calib, resolution, now):
+def _process_landmarks(buf, landmark_sets, mv_calib, resolution, now, refine=False):
     """Extract 2D landmarks from each camera, triangulate, write to SHM.
 
     ``landmark_sets`` is a list of ``pose_landmarks[0]`` per camera (or
     ``None`` if that camera's detector didn't find a pose this frame).
     ``mv_calib`` is a :class:`MultiViewCalibration` (possibly promoted
-    from legacy stereo) or ``None`` for monocular fallback.
+    from legacy stereo) or ``None`` for monocular fallback. ``refine``
+    triggers non-linear BA on top of DLT.
     """
     from .complementary_filter import JOINT_NAMES
     from .stereo_calibration import triangulate_multiview
@@ -568,7 +588,8 @@ def _process_landmarks(buf, landmark_sets, mv_calib, resolution, now):
                     np.array([per_view_vis[v]]) for v in range(usable_views)
                 ]
                 pts_3d = triangulate_multiview(
-                    mv_calib, points_per_view, confidences_per_view
+                    mv_calib, points_per_view, confidences_per_view,
+                    refine=refine,
                 )
                 pos = pts_3d[0] / 1000.0  # mm → meters
                 if not np.all(np.isfinite(pos)):

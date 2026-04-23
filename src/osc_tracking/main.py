@@ -341,6 +341,7 @@ def main() -> None:
         calibration_file=cfg.calibration_file,
         model_path=cfg.model_path,
         model_path_lite=cfg.model_path_lite,
+        refine_triangulation=cfg.refine_triangulation,
     )
 
     camera = CameraTracker(config=camera_config)

@@ -19,6 +19,7 @@ from osc_tracking.stereo_calibration import (
     StereoCalibration,
     load_multiview_calibration,
     multiview_from_stereo,
+    refine_multiview,
     save_multiview_calibration,
     triangulate_multiview,
 )
@@ -143,6 +144,86 @@ class TestTriangulateMultiview:
         calib = MultiViewCalibration(views=[view], image_size=(640, 480))
         with pytest.raises(ValueError, match="at least 2 cameras"):
             triangulate_multiview(calib, [np.array([[100.0, 100.0]])])
+
+
+def _reprojection_error(
+    calib: MultiViewCalibration,
+    point_3d: np.ndarray,
+    projections: list[np.ndarray],
+    confidences: list[np.ndarray] | None = None,
+) -> float:
+    """Weighted mean 2D reprojection error across views — the metric BA
+    is trying to minimise. Used to show that BA actually reduces it."""
+    if confidences is None:
+        confidences = [np.array([1.0]) for _ in calib.views]
+    total = 0.0
+    weight_sum = 0.0
+    for view, obs, conf in zip(calib.views, projections, confidences):
+        w = float(conf[0])
+        if w <= 0:
+            continue
+        projected = _project(view, point_3d)
+        total += w * float(np.linalg.norm(projected - obs[0]))
+        weight_sum += w
+    return total / max(weight_sum, 1e-9)
+
+
+class TestBundleAdjustment:
+    def test_refine_reduces_reprojection_error_under_noise(
+        self, three_camera_rig: MultiViewCalibration
+    ) -> None:
+        """With per-view observation noise, BA should beat linear DLT on
+        reprojection error. That's the whole point of running it."""
+        rng = np.random.default_rng(42)
+        point = np.array([0.05, -0.10, 2.0])
+        clean = [_project(v, point).reshape(1, 2) for v in three_camera_rig.views]
+        noisy = [obs + rng.normal(scale=0.8, size=obs.shape) for obs in clean]
+
+        dlt = triangulate_multiview(three_camera_rig, noisy, refine=False)
+        refined = triangulate_multiview(three_camera_rig, noisy, refine=True)
+
+        dlt_err = _reprojection_error(three_camera_rig, dlt[0], noisy)
+        refined_err = _reprojection_error(three_camera_rig, refined[0], noisy)
+        # BA should not make things worse, and with 3 cams + pixel-scale
+        # noise it should tangibly improve the residual.
+        assert refined_err <= dlt_err + 1e-6
+
+    def test_refine_preserves_exact_recovery_on_clean_data(
+        self, three_camera_rig: MultiViewCalibration
+    ) -> None:
+        """Clean geometry: BA must not drift away from the DLT answer."""
+        point = np.array([0.0, 0.0, 2.0])
+        projections = [_project(v, point).reshape(1, 2) for v in three_camera_rig.views]
+
+        refined = triangulate_multiview(three_camera_rig, projections, refine=True)
+
+        np.testing.assert_allclose(refined[0], point, atol=1e-4)
+
+    def test_refine_skips_nan_seeds(
+        self, three_camera_rig: MultiViewCalibration
+    ) -> None:
+        """Points that came back NaN from DLT (under-constrained) must
+        stay NaN through BA — no silent fabrication."""
+        initial = np.array([[np.nan, np.nan, np.nan]])
+        dummy_obs = [np.array([[100.0, 100.0]]) for _ in three_camera_rig.views]
+        refined = refine_multiview(three_camera_rig, initial, dummy_obs)
+        assert np.all(np.isnan(refined[0]))
+
+    def test_refine_respects_zero_confidence_view(
+        self, three_camera_rig: MultiViewCalibration
+    ) -> None:
+        """A zero-confidence view must not influence the refined point."""
+        point = np.array([0.0, 0.0, 2.0])
+        projections = [_project(v, point).reshape(1, 2) for v in three_camera_rig.views]
+        # Garbage in view 2, but confidence zero → should not pull the
+        # estimate away from the truth.
+        projections[2] = np.array([[9999.0, 9999.0]])
+        conf = [np.array([1.0]), np.array([1.0]), np.array([0.0])]
+
+        refined = triangulate_multiview(
+            three_camera_rig, projections, conf, refine=True
+        )
+        np.testing.assert_allclose(refined[0], point, atol=1e-4)
 
 
 class TestMultiViewFromStereo:

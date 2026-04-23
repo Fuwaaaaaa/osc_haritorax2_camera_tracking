@@ -406,3 +406,24 @@ class TestCamIndicesList:
         cfg = CameraConfig(cam1_index=5, cam2_index=6)
         assert cfg.cam_indices == [5, 6]
         assert cfg.effective_cam_indices == [5, 6]
+
+
+class TestRefineTriangulationDefault:
+    """The tri-state ``refine_triangulation`` field auto-resolves to a bool
+    based on camera count when left unset."""
+
+    def test_auto_off_for_two_cameras(self):
+        cfg = CameraConfig(cam_indices=[0, 1])
+        assert cfg.effective_refine_triangulation is False
+
+    def test_auto_on_for_three_cameras(self):
+        cfg = CameraConfig(cam_indices=[0, 1, 2])
+        assert cfg.effective_refine_triangulation is True
+
+    def test_explicit_true_overrides_auto_on_two_cameras(self):
+        cfg = CameraConfig(cam_indices=[0, 1], refine_triangulation=True)
+        assert cfg.effective_refine_triangulation is True
+
+    def test_explicit_false_overrides_auto_on_three_cameras(self):
+        cfg = CameraConfig(cam_indices=[0, 1, 2], refine_triangulation=False)
+        assert cfg.effective_refine_triangulation is False

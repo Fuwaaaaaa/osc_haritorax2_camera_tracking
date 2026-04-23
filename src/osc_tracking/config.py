@@ -41,6 +41,10 @@ class TrackingConfig:
     cam_indices: list[int] = field(default_factory=list)
     camera_resolution: tuple[int, int] = (640, 480)
     target_fps: int = 30
+    # Bundle-adjustment refinement of the multi-view triangulation.
+    # None = auto (on for 3+ cameras, off for 2). Set explicitly to
+    # force the behaviour regardless of camera count.
+    refine_triangulation: bool | None = None
 
     # IMU receiver selector ("osc" or "ble"). Defaults to "osc" for
     # backward compatibility with existing SlimeTora/SlimeVR setups.
@@ -159,6 +163,19 @@ def _apply_json(config: TrackingConfig, path: Path) -> None:
                             "an integer — skipping", path, k,
                         )
                 value = coerced
+            if key == "refine_triangulation":
+                # Tri-state field: null means "auto" (on for 3+ cameras,
+                # off otherwise). Bypass the default typecheck since the
+                # default value of None resolves to NoneType and would
+                # reject a legitimate bool override.
+                if value is None or isinstance(value, bool):
+                    setattr(config, key, value)
+                    continue
+                logger.warning(
+                    "Config %s: '%s' expected bool or null, got %s — skipping",
+                    path, key, type(value).__name__,
+                )
+                continue
             # Validate type matches the default
             expected = type(getattr(config, key))
             if expected in (int, float) and isinstance(value, (int, float)):
