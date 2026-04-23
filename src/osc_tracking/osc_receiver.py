@@ -15,27 +15,23 @@ Architecture:
 
 import logging
 import math
-import threading
 import time
-from dataclasses import dataclass, field
 
 from pythonosc.dispatcher import Dispatcher
 from pythonosc.osc_server import BlockingOSCUDPServer
 from scipy.spatial.transform import Rotation
 
+from .receiver_base import BaseIMUReceiver, BoneData
 from .tracker_mapping import slimevr_osc_addresses
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class BoneData:
-    """Rotation data for a single bone."""
-    rotation: Rotation = field(default_factory=Rotation.identity)
-    timestamp: float = 0.0
+# Re-exported so existing callers that do `from .osc_receiver import BoneData`
+# keep working; the canonical definition lives in receiver_base.
+__all__ = ["BoneData", "OSCReceiver"]
 
 
-class OSCReceiver:
+class OSCReceiver(BaseIMUReceiver):
     """Receives and parses IMU tracker OSC messages.
 
     Expects SlimeVR Server OSC output format (see DEFAULT_BONE_ADDRESSES).
@@ -58,33 +54,23 @@ class OSCReceiver:
         port: int = 6969,
         bone_addresses: dict[str, str] | None = None,
     ):
+        super().__init__()
         self.host = host
         self.port = port
         self.bone_addresses = bone_addresses or self.DEFAULT_BONE_ADDRESSES
-        self.bones: dict[str, BoneData] = {
-            name: BoneData() for name in self.bone_addresses.values()
-        }
+        self.bones = {name: BoneData() for name in self.bone_addresses.values()}
         self._server: BlockingOSCUDPServer | None = None
-        self._thread: threading.Thread | None = None
-        self._running = False
-        self._last_receive_time: float = 0.0
 
-    @property
-    def is_connected(self) -> bool:
-        """True if OSC data was received within the last second."""
-        return (time.monotonic() - self._last_receive_time) < 1.0
+    def _thread_name(self) -> str:
+        return "osc-receiver"
 
-    @property
-    def seconds_since_last_receive(self) -> float:
-        if self._last_receive_time == 0.0:
-            return float("inf")
-        return time.monotonic() - self._last_receive_time
+    def _prepare_start(self) -> None:
+        """Bind the OSC server (with port-retry fallback) before thread spawn.
 
-    def start(self) -> None:
-        """Start the OSC server in a background thread."""
-        if self._running:
-            return
-
+        Retry logic runs here so an unrecoverable bind error surfaces as
+        an OSError from ``start()`` with the receiver left in a clean
+        stopped state, matching the pre-refactor behavior.
+        """
         dispatcher = Dispatcher()
         for address, bone_name in self.bone_addresses.items():
             dispatcher.map(address, self._handle_rotation, bone_name)
@@ -115,33 +101,14 @@ class OSCReceiver:
             else:
                 raise
 
-        self._running = True
+    def _run_loop(self) -> None:
         assert self._server is not None
-        self._thread = threading.Thread(
-            target=self._server.serve_forever,
-            daemon=True,
-            name="osc-receiver",
-        )
-        self._thread.start()
+        self._server.serve_forever()
 
-    def stop(self) -> None:
-        """Stop the OSC server."""
-        self._running = False
-        if self._server:
+    def _on_stop_requested(self) -> None:
+        if self._server is not None:
             self._server.shutdown()
             self._server = None
-        if self._thread:
-            self._thread.join(timeout=2.0)
-            self._thread = None
-
-    def get_bone_rotation(self, bone_name: str) -> Rotation | None:
-        """Get the latest rotation for a bone, or None if stale."""
-        bone = self.bones.get(bone_name)
-        if bone is None:
-            return None
-        if time.monotonic() - bone.timestamp > 1.0:
-            return None
-        return bone.rotation
 
     def _handle_rotation(
         self, address: str, bone_name: str, *args: float
@@ -170,5 +137,3 @@ class OSCReceiver:
     def _handle_unknown(self, address: str, *args) -> None:
         """Log unknown OSC addresses for Phase 0 investigation."""
         pass  # Could log to file for format discovery
-
-

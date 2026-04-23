@@ -35,9 +35,9 @@ Threading
 ---------
 bleak is asyncio-only. This module runs a dedicated asyncio event loop in
 a background daemon thread. Notifications update ``self.bones`` directly
-(key-level dict writes are atomic under the GIL). The main thread reads
-via ``get_bone_rotation`` with a 1-second staleness guard, matching the
-OSCReceiver contract.
+(key-level dict writes are atomic under the GIL). Reads on the main thread
+go through ``get_bone_rotation`` (inherited from BaseIMUReceiver) with a
+1-second staleness guard, matching the OSCReceiver contract.
 """
 
 from __future__ import annotations
@@ -45,11 +45,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
-import threading
 import time
-from dataclasses import dataclass, field
 
 from scipy.spatial.transform import Rotation
+
+from .receiver_base import BaseIMUReceiver, BoneData
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +67,18 @@ FRESHNESS_WINDOW_SEC = 1.0
 # Seconds to back off between scan/connect retries when a peripheral drops.
 RECONNECT_DELAY_SEC = 5.0
 
-
-@dataclass
-class BoneData:
-    """Rotation data for a single tracked bone."""
-
-    rotation: Rotation = field(default_factory=Rotation.identity)
-    timestamp: float = 0.0
+# Re-exported so existing callers keep working after the base-class migration.
+__all__ = [
+    "BLEReceiver",
+    "BoneData",
+    "DEFAULT_NAME_PREFIX",
+    "FRESHNESS_WINDOW_SEC",
+    "RECONNECT_DELAY_SEC",
+    "ROTATION_SCALAR",
+    "SENSOR_CHAR_UUID",
+    "TRACKER_SERVICE_UUID",
+    "decode_rotation",
+]
 
 
 def decode_rotation(data: bytes) -> Rotation | None:
@@ -110,7 +115,7 @@ def decode_rotation(data: bytes) -> Rotation | None:
         return None
 
 
-class BLEReceiver:
+class BLEReceiver(BaseIMUReceiver):
     """Receives IMU rotation data from HaritoraX2 peripherals over BLE.
 
     Parameters
@@ -132,18 +137,16 @@ class BLEReceiver:
         name_prefix: str = DEFAULT_NAME_PREFIX,
         scan_timeout_sec: float = 10.0,
     ) -> None:
+        super().__init__(freshness_window_sec=FRESHNESS_WINDOW_SEC)
         mapping = dict(local_name_to_bone or {})
         self._warn_on_unknown_bones(mapping)
         self.local_name_to_bone: dict[str, str] = mapping
         self.name_prefix = name_prefix
         self.scan_timeout_sec = float(scan_timeout_sec)
 
-        self.bones: dict[str, BoneData] = {
+        self.bones = {
             bone: BoneData() for bone in self.local_name_to_bone.values()
         }
-        self._last_receive_time: float = 0.0
-        self._running: bool = False
-        self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
 
     @staticmethod
@@ -168,32 +171,13 @@ class BLEReceiver:
             )
 
     # ------------------------------------------------------------------
-    # IMUReceiver protocol surface
+    # BaseIMUReceiver hooks
     # ------------------------------------------------------------------
-    @property
-    def is_connected(self) -> bool:
-        """True iff a rotation was received within the freshness window."""
-        if self._last_receive_time == 0.0:
-            return False
-        return (time.monotonic() - self._last_receive_time) < FRESHNESS_WINDOW_SEC
-
-    @property
-    def seconds_since_last_receive(self) -> float:
-        if self._last_receive_time == 0.0:
-            return float("inf")
-        return time.monotonic() - self._last_receive_time
+    def _thread_name(self) -> str:
+        return "ble-receiver"
 
     def start(self) -> None:
-        """Spawn the background asyncio thread. Idempotent."""
-        if self._running:
-            return
-        self._running = True
-        self._thread = threading.Thread(
-            target=self._run_event_loop,
-            daemon=True,
-            name="ble-receiver",
-        )
-        self._thread.start()
+        super().start()
         logger.info(
             "BLEReceiver started (prefix=%r, %d bone mappings)",
             self.name_prefix,
@@ -201,37 +185,20 @@ class BLEReceiver:
         )
 
     def stop(self) -> None:
-        """Signal shutdown and join the background thread. May take up to 2s."""
-        self._running = False
+        super().stop()
+        self._loop = None
+        logger.info("BLEReceiver stopped")
+
+    def _on_stop_requested(self) -> None:
+        """Wake the asyncio sleep so ``_ble_loop`` sees _running=False quickly."""
         loop = self._loop
         if loop is not None and loop.is_running():
-            # Wake the sleep inside the connect loop so it notices _running=False quickly.
             try:
                 loop.call_soon_threadsafe(lambda: None)
             except RuntimeError:
                 pass
-        thread = self._thread
-        if thread is not None:
-            thread.join(timeout=2.0)
-            if thread.is_alive():
-                logger.warning("BLEReceiver thread did not exit within 2s")
-        self._thread = None
-        self._loop = None
-        logger.info("BLEReceiver stopped")
 
-    def get_bone_rotation(self, bone_name: str) -> Rotation | None:
-        """Return the freshest rotation for ``bone_name``, or None if stale."""
-        bone = self.bones.get(bone_name)
-        if bone is None or bone.timestamp == 0.0:
-            return None
-        if (time.monotonic() - bone.timestamp) > FRESHNESS_WINDOW_SEC:
-            return None
-        return bone.rotation
-
-    # ------------------------------------------------------------------
-    # Background thread / asyncio plumbing
-    # ------------------------------------------------------------------
-    def _run_event_loop(self) -> None:
+    def _run_loop(self) -> None:
         """Entry point for the background daemon thread."""
         try:
             # Import bleak lazily so environments without BLE stack can still
