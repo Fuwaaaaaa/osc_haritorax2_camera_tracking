@@ -10,6 +10,7 @@
 |---|---|---|---|
 | HaritoraX2 | SlimeTora → SlimeVR Server → OSC | ✅ 動作確認 | [haritora-setup-guide.md](haritora-setup-guide.md) |
 | HaritoraX2 | BLE 直接 (bleak) | 🧪 experimental | [ble-direct-guide.md](ble-direct-guide.md) |
+| HaritoraX / HaritoraX2 | GX6/GX2 dongle or SPP (pyserial) | 🧪 experimental | [serial-direct-guide.md](serial-direct-guide.md) |
 
 ## 動作報告求む (原理的に動くはず)
 
