@@ -81,13 +81,10 @@
 ### ~~N台カメラ対応（設定 API のみ）~~ ✅ 完了（scaffold）
 - **解決:** `CameraConfig.cam_indices: list[int]` + `effective_cam_indices` / `camera_count` プロパティ、`--cams 0,1` CLI フラグ、`config.cam_indices` 設定項目を追加。1台 (mono) / 2台 (stereo) に対応。3台以上は warn + 先頭2台のみ使用。legacy `cam1_index` / `cam2_index` は back-compat で維持。実際のマルチビュー三角測量 (3+ カメラの bundle adjustment) は別 TODO (下記「真のマルチビュー三角測量」)。
 
-### 真のマルチビュー三角測量（3+ カメラ）
-- **What:** 3台以上のカメラからの bundle adjustment による三角測量 (現在は先頭2台のみ使用)
-- **Why:** Phase 3 の 12ヶ月理想状態。遮蔽時のカバレッジ向上
-- **Effort:** L（CC: 3時間+）
-- **Priority:** P3
-- **Depends on:** `CameraConfig.cam_indices` scaffold 完了 (済)
-- **Context:** `_camera_worker` を N-way に拡張、`stereo_calibration` を multi-view 化 (OpenCV `recoverPose` / SfM)、SHM layout を N-cam 信頼度に generalize
+### ~~真のマルチビュー三角測量（3+ カメラ）~~ ✅ 完了（linear DLT）
+- **解決:** `stereo_calibration.py` に `MultiViewCalibration` + `triangulate_multiview()` (SVD-based DLT, per-view confidence 重み付け) を追加。`_camera_worker` を N-way (N=任意) に拡張、N-count の VideoCapture と PoseLandmarker を開いて全ビューから三角測量。`_load_multiview_or_stereo` が multi-view .npz を優先し、legacy stereo .npz は `multiview_from_stereo` で自動 promote するので 2 カメラ構成は挙動不変。SHM は wire 互換 (7 floats/joint) を維持 — N>=3 時は per-camera visibility を「前半/後半 min」に畳んで状態機の SINGLE_CAM_DEGRADED 検出を温存。
+- **Bundle adjustment は今回スコープ外** — linear DLT + confidence 重み付けで 3 カメラ redundancy を活かす実装。精密な BA は将来の follow-up。
+- **未対応項目:** `calibrate` tool の multi-view 対応 (現状は stereo pair を手動で組み合わせる必要あり)、実機 3+ カメラでの動作検証
 
 ### ~~速度ベースポーズ予測~~ ✅ 完了
 - **解決:** `src/osc_tracking/pose_predictor.py` に `PosePredictor` Protocol + `VelocityPredictor` 実装。ローリング履歴からジョイント毎に線形速度を推定し、`FULL_OCCLUSION` / `PARTIAL_OCCLUSION` 時に `FusionEngine` が camera_pos 欠損箇所に予測値を注入。`stale_window_seconds` で長時間遮蔽後のワープを防止、`max_predict_seconds` で absurd extrapolation をクランプ。14 tests + fusion integration 3 tests.
