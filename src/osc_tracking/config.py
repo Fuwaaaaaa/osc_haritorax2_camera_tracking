@@ -57,6 +57,14 @@ class TrackingConfig:
     ble_scan_timeout_sec: float = 10.0
     ble_local_name_to_bone: dict[str, str] = field(default_factory=dict)
 
+    # Serial settings (GX6/GX2 dongle or SPP COM port — experimental).
+    # Only used when receiver_type == "serial". serial_tracker_id_to_bone
+    # maps per-dongle tracker id (0..7) to skeleton bone name.
+    # JSON keys must be stringified ints: {"0": "Hips", "1": "Chest"}.
+    serial_port: str = ""
+    serial_baudrate: int = 500000
+    serial_tracker_id_to_bone: dict[int, str] = field(default_factory=dict)
+
     # Calibration
     calibration_file: str = "calibration_data/stereo_calib.npz"
 
@@ -129,6 +137,18 @@ def _apply_json(config: TrackingConfig, path: Path) -> None:
                 continue
             if key == "camera_resolution":
                 value = tuple(value)
+            if key == "serial_tracker_id_to_bone" and isinstance(value, dict):
+                # JSON keys are always strings; coerce to int for protocol.
+                coerced: dict[int, str] = {}
+                for k, v in value.items():
+                    try:
+                        coerced[int(k)] = v
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            "Config %s: serial_tracker_id_to_bone key %r is not "
+                            "an integer — skipping", path, k,
+                        )
+                value = coerced
             # Validate type matches the default
             expected = type(getattr(config, key))
             if expected in (int, float) and isinstance(value, (int, float)):
