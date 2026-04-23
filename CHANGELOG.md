@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-### Added (multi-view triangulation)
+### Added (multi-view triangulation + BA refinement)
 - **真のマルチビュー三角測量 (3+ カメラ)**: `stereo_calibration.py` に `MultiViewCalibration` データクラス、`triangulate_multiview()` (SVD-based DLT + per-view confidence 重み付け)、`multiview_from_stereo()` (legacy `StereoCalibration` のロスレス昇格)、`save_multiview_calibration` / `load_multiview_calibration` (`.npz` I/O、`allow_pickle=False`) を追加。`_camera_worker` を N-way に拡張し、`config.cam_indices` の全カメラから VideoCapture + PoseLandmarker を開いて triangulate_multiview に供給。2 カメラ構成は `multiview_from_stereo` 経由で従来 stereo calib ファイルがそのまま使える (wire 互換: SHM 7 floats/joint 維持、N>=3 時は per-cam visibility を前半/後半 min に畳む)。`CameraConfig` の 3+ カメラ warn/clip は削除。15 multi-view tests 追加
+- **Bundle adjustment refinement**: `refine_multiview()` は DLT で得た初期推定を scipy の LM (`least_squares`) で非線形最適化し、実際の weighted reprojection error を最小化。`triangulate_multiview(..., refine=True)` で有効化。`CameraConfig.refine_triangulation` / `TrackingConfig.refine_triangulation` を tri-state (`True` / `False` / `None`) で追加 — `None` は auto (3+ カメラで on、2 カメラで off)。DLT は 2 ビュー理想幾何では最適なので 2 カメラでは refinement の利得が薄く、3+ ビューの冗長性で真価を発揮するという根拠から auto ポリシー。+4 BA tests, +4 config auto-policy tests
 
 ### Added (docs)
 - **`docs/slimevr-setup-guide.md`**: SlimeVR native / Tundra Labs / その他 SlimeVR 互換 IMU トラッカー向けのセットアップガイド。OSC 出力有効化、`connection_check` での疎通確認、OSC トラッカー番号マッピングがズレた場合の対処、トラッカー数が 8 未満の場合の挙動を明記。コードは既に device-agnostic なのでガイドのみで対応可能。`docs/other-trackers.md` と `README.md` から新ガイドへリンクを追加

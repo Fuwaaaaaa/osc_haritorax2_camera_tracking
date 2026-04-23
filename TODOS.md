@@ -81,9 +81,9 @@
 ### ~~N台カメラ対応（設定 API のみ）~~ ✅ 完了（scaffold）
 - **解決:** `CameraConfig.cam_indices: list[int]` + `effective_cam_indices` / `camera_count` プロパティ、`--cams 0,1` CLI フラグ、`config.cam_indices` 設定項目を追加。1台 (mono) / 2台 (stereo) に対応。3台以上は warn + 先頭2台のみ使用。legacy `cam1_index` / `cam2_index` は back-compat で維持。実際のマルチビュー三角測量 (3+ カメラの bundle adjustment) は別 TODO (下記「真のマルチビュー三角測量」)。
 
-### ~~真のマルチビュー三角測量（3+ カメラ）~~ ✅ 完了（linear DLT）
+### ~~真のマルチビュー三角測量（3+ カメラ）~~ ✅ 完了（linear DLT + BA refinement）
 - **解決:** `stereo_calibration.py` に `MultiViewCalibration` + `triangulate_multiview()` (SVD-based DLT, per-view confidence 重み付け) を追加。`_camera_worker` を N-way (N=任意) に拡張、N-count の VideoCapture と PoseLandmarker を開いて全ビューから三角測量。`_load_multiview_or_stereo` が multi-view .npz を優先し、legacy stereo .npz は `multiview_from_stereo` で自動 promote するので 2 カメラ構成は挙動不変。SHM は wire 互換 (7 floats/joint) を維持 — N>=3 時は per-camera visibility を「前半/後半 min」に畳んで状態機の SINGLE_CAM_DEGRADED 検出を温存。
-- **Bundle adjustment は今回スコープ外** — linear DLT + confidence 重み付けで 3 カメラ redundancy を活かす実装。精密な BA は将来の follow-up。
+- **Bundle adjustment 追加:** `refine_multiview()` が scipy LM で DLT 推定を非線形 refinement。`refine_triangulation` config flag (tri-state: `True`/`False`/`None`=auto; auto は 3+ カメラで on、2 カメラで off)。観測ノイズ下で reprojection error を削減。
 - **未対応項目:** `calibrate` tool の multi-view 対応 (現状は stereo pair を手動で組み合わせる必要あり)、実機 3+ カメラでの動作検証
 
 ### ~~速度ベースポーズ予測~~ ✅ 完了
