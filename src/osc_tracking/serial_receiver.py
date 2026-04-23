@@ -41,8 +41,6 @@ from __future__ import annotations
 import logging
 import time
 
-from scipy.spatial.transform import Rotation
-
 from .ble_receiver import decode_rotation
 from .receiver_base import BaseIMUReceiver, BoneData
 
