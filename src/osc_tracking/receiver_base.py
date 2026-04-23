@@ -18,6 +18,7 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from scipy.spatial.transform import Rotation
@@ -158,3 +159,34 @@ class BaseIMUReceiver(ABC):
         closes the handle so a read wakes up. For asyncio-based
         transports (BLE) it schedules a cancellation on the loop.
         """
+
+    # ------------------------------------------------------------------
+    # Shared helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def warn_on_unknown_bones(bone_names: Iterable[str], transport: str) -> None:
+        """Warn when a bone mapping points at names FusionEngine won't read.
+
+        Catches typos like ``"hips"`` / ``"LeftFeet"`` that would
+        otherwise silently leave the target bone empty forever.
+        ``transport`` is a short label (``"BLE"`` / ``"Serial"``) used
+        only in the warning message.
+        """
+        # Lazy import: the receivers live in infrastructure but the list
+        # of known bones is a domain concept — keeping the import inside
+        # the method avoids forcing every BaseIMUReceiver import to pull
+        # in the full tracking stack.
+        from osc_tracking.domain.bones import JOINT_NAMES
+
+        known = set(JOINT_NAMES)
+        unknown = sorted({bone for bone in bone_names if bone not in known})
+        if unknown:
+            logger.warning(
+                "%s bone mapping contains unknown bone name(s) %s; "
+                "these entries will receive data but FusionEngine "
+                "will never read them. Valid names: %s",
+                transport,
+                unknown,
+                sorted(known),
+            )

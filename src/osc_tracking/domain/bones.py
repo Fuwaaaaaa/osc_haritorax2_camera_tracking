@@ -13,7 +13,6 @@ iterate this list rely on that order for SHM layout and OSC output.
 
 from __future__ import annotations
 
-
 # IMU side provides: Hips, Chest, LeftFoot, RightFoot,
 #                     LeftKnee, RightKnee, LeftElbow, RightElbow
 # Camera provides:   Head (via MediaPipe face landmarks)

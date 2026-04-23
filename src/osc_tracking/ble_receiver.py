@@ -139,7 +139,7 @@ class BLEReceiver(BaseIMUReceiver):
     ) -> None:
         super().__init__(freshness_window_sec=FRESHNESS_WINDOW_SEC)
         mapping = dict(local_name_to_bone or {})
-        self._warn_on_unknown_bones(mapping)
+        self.warn_on_unknown_bones(mapping.values(), "BLE")
         self.local_name_to_bone: dict[str, str] = mapping
         self.name_prefix = name_prefix
         self.scan_timeout_sec = float(scan_timeout_sec)
@@ -148,27 +148,6 @@ class BLEReceiver(BaseIMUReceiver):
             bone: BoneData() for bone in self.local_name_to_bone.values()
         }
         self._loop: asyncio.AbstractEventLoop | None = None
-
-    @staticmethod
-    def _warn_on_unknown_bones(mapping: dict[str, str]) -> None:
-        """Warn when config maps to bone names FusionEngine will not read.
-
-        Catches typos like ``"hips"`` vs ``"Hips"`` or ``"LeftFeet"`` that
-        would otherwise silently leave the bone empty forever.
-        """
-        # Lazy import so the receiver module stays importable in contexts
-        # that don't pull in the full tracking stack.
-        from .complementary_filter import JOINT_NAMES
-        known = set(JOINT_NAMES)
-        unknown = sorted({bone for bone in mapping.values() if bone not in known})
-        if unknown:
-            logger.warning(
-                "BLE bone mapping contains unknown bone name(s) %s; "
-                "these peripherals will receive data but FusionEngine "
-                "will never read them. Valid names: %s",
-                unknown,
-                sorted(known),
-            )
 
     # ------------------------------------------------------------------
     # BaseIMUReceiver hooks
