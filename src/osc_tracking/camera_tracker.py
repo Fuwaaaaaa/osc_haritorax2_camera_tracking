@@ -99,11 +99,13 @@ def _unique_shm_name() -> str:
 class CameraConfig:
     """Configuration for the camera setup.
 
-    Legacy fields ``cam1_index`` / ``cam2_index`` remain for backward
-    compatibility. New code should set ``cam_indices`` directly, which
-    accepts 1 (monocular) or 2 (stereo) cameras. A list of 3+ is
-    currently clipped to the first two — true multi-view triangulation
-    is tracked as a future TODO.
+    ``cam_indices`` is the primary knob. 1 entry → monocular (MediaPipe
+    z-depth fallback). 2 entries → stereo triangulation. 3+ entries →
+    multi-view SVD-DLT triangulation (needs a multi-view calibration
+    file; a 2-camera stereo file is promoted on load but does not
+    benefit extra cameras).
+
+    Legacy ``cam1_index`` / ``cam2_index`` stay for back-compat.
     """
     cam1_index: int = 0
     cam2_index: int = 1
@@ -119,26 +121,18 @@ class CameraConfig:
             self.cam_indices = [self.cam1_index, self.cam2_index]
         if not self.cam_indices:
             raise ValueError("cam_indices must contain at least one camera index")
-        if len(self.cam_indices) > 2:
-            logger.warning(
-                "cam_indices has %d cameras; multi-view triangulation is not "
-                "yet implemented. Using the first 2 (%s) and ignoring the rest.",
-                len(self.cam_indices),
-                self.cam_indices[:2],
-            )
-        # Keep legacy fields consistent so the worker (which still uses
-        # cam1_index / cam2_index) picks up explicit cam_indices lists.
+        # Keep legacy fields consistent so back-compat callers still see
+        # the first two cameras at the historical attribute names.
         self.cam1_index = self.cam_indices[0]
-        # Mono mode: reuse cam1 for cam2 so triangulation stays valid on
-        # the degenerate case; the calib-absent branch will still fall
-        # back to MediaPipe z-depth.
+        # Mono mode: reuse cam1 for cam2 so the legacy 2-cam fallback path
+        # stays valid on the degenerate case.
         self.cam2_index = self.cam_indices[1] if len(self.cam_indices) >= 2 else self.cam_indices[0]
 
     @property
     def effective_cam_indices(self) -> list[int]:
-        """The cameras actually opened by the worker (at most 2 today)."""
+        """Every camera index the worker will open."""
         assert self.cam_indices is not None  # set in __post_init__
-        return self.cam_indices[:2]
+        return list(self.cam_indices)
 
     @property
     def camera_count(self) -> int:
@@ -259,6 +253,34 @@ class CameraTracker:
         return self._process is not None and self._process.is_alive()
 
 
+def _load_multiview_or_stereo(calibration_file: str):
+    """Load calibration as MultiViewCalibration, promoting stereo if needed.
+
+    Preference order:
+      1. multi-view .npz at ``calibration_file`` (written by the new
+         multi-view calibration flow)
+      2. legacy stereo .npz at the same path, promoted via
+         :func:`multiview_from_stereo` so triangulate_multiview can
+         still run the 2-camera case
+
+    Returns ``None`` when neither shape loads — the worker falls back
+    to monocular depth estimation.
+    """
+    from .stereo_calibration import (
+        load_calibration,
+        load_multiview_calibration,
+        multiview_from_stereo,
+    )
+
+    mv = load_multiview_calibration(calibration_file)
+    if mv is not None:
+        return mv
+    stereo = load_calibration(calibration_file)
+    if stereo is not None:
+        return multiview_from_stereo(stereo)
+    return None
+
+
 def _camera_worker(
     config: CameraConfig,
     shm_name: str,
@@ -267,8 +289,11 @@ def _camera_worker(
 ) -> None:
     """Camera subprocess entry point.
 
-    Captures frames from both cameras, runs MediaPipe Pose Landmarker,
-    performs stereo triangulation, and writes results to shared memory.
+    Captures frames from every camera in ``config.effective_cam_indices``,
+    runs one MediaPipe Pose Landmarker instance per camera, and
+    triangulates joints via SVD-DLT when ≥ 2 cameras + calibration are
+    available. Falls back to monocular z-depth when a single camera
+    or no calibration is present.
     """
     import cv2
 
@@ -283,30 +308,42 @@ def _camera_worker(
         buffer=shm.buf,
     )
 
-    # Initialize cameras
-    cap1 = cv2.VideoCapture(config.cam1_index)
-    cap2 = cv2.VideoCapture(config.cam2_index)
-    for cap in (cap1, cap2):
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.resolution[0])
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.resolution[1])
+    cam_indices = list(config.effective_cam_indices)
+
+    def _open_all() -> list:
+        opened = []
+        for idx in cam_indices:
+            cap = cv2.VideoCapture(idx)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.resolution[0])
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.resolution[1])
+            opened.append(cap)
+        return opened
+
+    caps = _open_all()
 
     frame_delay = 1.0 / config.target_fps
 
-    # Load stereo calibration
-    from .stereo_calibration import load_calibration
-    calib = load_calibration(config.calibration_file)
-    if calib is None:
+    mv_calib = _load_multiview_or_stereo(config.calibration_file)
+    if mv_calib is None:
         logging.warning(
             "No stereo calibration found at %s. "
             "Run 'python -m osc_tracking.tools.calibrate' first. "
             "Falling back to monocular depth estimation.",
             config.calibration_file,
         )
+    elif mv_calib.camera_count != len(cam_indices):
+        logging.warning(
+            "Calibration has %d cameras but config requests %d. "
+            "Triangulation will use the min of the two. If you recently "
+            "added/removed a camera, re-run the calibration tool.",
+            mv_calib.camera_count,
+            len(cam_indices),
+        )
 
-    # Initialize MediaPipe Pose Landmarker
-    pose1, pose2 = None, None
+    # Initialize MediaPipe Pose Landmarker — one instance per camera.
+    pose_instances: list = []
     try:
-        import mediapipe as mp_lib
+        import mediapipe as mp_lib  # noqa: F401
         from mediapipe.tasks.python import BaseOptions, vision
 
         model_path = config.model_path
@@ -327,10 +364,16 @@ def _camera_worker(
                 min_pose_detection_confidence=0.5,
                 min_tracking_confidence=0.5,
             )
-            pose1 = vision.PoseLandmarker.create_from_options(options)
-            # Need separate instance for camera 2 (stateful)
-            pose2 = vision.PoseLandmarker.create_from_options(options)
-            logging.info("MediaPipe Pose Landmarker loaded: %s", model_path)
+            # One stateful PoseLandmarker per camera — the detector keeps
+            # per-call history and can't be shared across views.
+            pose_instances = [
+                vision.PoseLandmarker.create_from_options(options)
+                for _ in cam_indices
+            ]
+            logging.info(
+                "MediaPipe Pose Landmarker loaded: %s (%d instances)",
+                model_path, len(pose_instances),
+            )
     except Exception as e:
         logging.error("MediaPipe init failed: %s", e)
 
@@ -340,53 +383,44 @@ def _camera_worker(
     while running.is_set():
         loop_start = time.monotonic()
 
-        ret1, frame1 = cap1.read()
-        ret2, frame2 = cap2.read()
-
-        if not ret1 or not ret2:
+        reads = [cap.read() for cap in caps]
+        if not all(ok for ok, _ in reads):
             consecutive_failures += 1
             if consecutive_failures >= 3:
-                logging.error("Camera capture failed 3x — restarting")
-                cap1.release()
-                cap2.release()
+                logging.error("Camera capture failed 3x — restarting all cameras")
+                for cap in caps:
+                    cap.release()
                 time.sleep(1.0)
-                cap1 = cv2.VideoCapture(config.cam1_index)
-                cap2 = cv2.VideoCapture(config.cam2_index)
+                caps = _open_all()
                 consecutive_failures = 0
             continue
 
+        frames = [frame for _, frame in reads]
         consecutive_failures = 0
         now = time.monotonic()
         frame_ts_ms = _next_monotonic_ms(frame_ts_ms)
 
-        if pose1 is not None and pose2 is not None:
+        if pose_instances and len(pose_instances) == len(caps):
             try:
                 import mediapipe as mp_lib
 
-                # Convert BGR → RGB for MediaPipe
-                rgb1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2RGB)
-                rgb2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2RGB)
+                landmark_sets: list = []
+                for frame, pose in zip(frames, pose_instances):
+                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    mp_image = mp_lib.Image(
+                        image_format=mp_lib.ImageFormat.SRGB, data=rgb
+                    )
+                    result = pose.detect_for_video(mp_image, frame_ts_ms)
+                    landmark_sets.append(
+                        result.pose_landmarks[0] if result.pose_landmarks else None
+                    )
 
-                mp_image1 = mp_lib.Image(
-                    image_format=mp_lib.ImageFormat.SRGB, data=rgb1
-                )
-                mp_image2 = mp_lib.Image(
-                    image_format=mp_lib.ImageFormat.SRGB, data=rgb2
-                )
-
-                result1 = pose1.detect_for_video(mp_image1, frame_ts_ms)
-                result2 = pose2.detect_for_video(mp_image2, frame_ts_ms)
-
-                if result1.pose_landmarks and result2.pose_landmarks:
-                    lm1 = result1.pose_landmarks[0]
-                    lm2 = result2.pose_landmarks[0]
-
+                if any(lms is not None for lms in landmark_sets):
                     with shm_lock:
                         _process_landmarks(
-                            buf, lm1, lm2, calib, config.resolution, now
+                            buf, landmark_sets, mv_calib, config.resolution, now
                         )
                 else:
-                    # No pose detected — write zero confidence
                     with shm_lock:
                         for i in range(JOINT_COUNT):
                             buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
@@ -397,7 +431,6 @@ def _camera_worker(
                     for i in range(JOINT_COUNT):
                         buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
         else:
-            # No MediaPipe — write zeros
             with shm_lock:
                 for i in range(JOINT_COUNT):
                     buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
@@ -408,84 +441,154 @@ def _camera_worker(
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-    cap1.release()
-    cap2.release()
-    if pose1:
-        pose1.close()
-    if pose2:
-        pose2.close()
+    for cap in caps:
+        cap.release()
+    for pose in pose_instances:
+        try:
+            pose.close()
+        except Exception:
+            pass
     shm.close()
 
 
-def _process_landmarks(buf, lm1, lm2, calib, resolution, now):
-    """Extract 2D landmarks, triangulate to 3D, and write to shared memory."""
+# MediaPipe landmark index pairs for each skeleton joint. ``None`` for the
+# second index means "single landmark" (no averaging).
+_MP_INDICES: dict[str, tuple[int, int | None]] = {
+    "Hips": (23, 24),       # average of left+right hip
+    "Chest": (11, 12),      # average of left+right shoulder
+    "Head": (0, None),      # nose only
+    "LeftFoot": (27, None),
+    "RightFoot": (28, None),
+    "LeftKnee": (25, None),
+    "RightKnee": (26, None),
+    "LeftElbow": (13, None),
+    "RightElbow": (14, None),
+}
+
+
+def _landmark_pixel_and_vis(
+    landmarks,
+    idx_a: int,
+    idx_b: int | None,
+    w: int,
+    h: int,
+) -> tuple[np.ndarray, float]:
+    """Resolve a skeleton joint to a pixel position + visibility.
+
+    Returns ``(NaN-array, 0.0)`` when ``landmarks`` is missing so the
+    triangulator treats this view as absent for that joint rather than
+    pulling the estimate toward an imaginary pixel.
+    """
+    if landmarks is None:
+        return np.array([np.nan, np.nan]), 0.0
+    lm_a = landmarks[idx_a]
+    vis = lm_a.visibility if hasattr(lm_a, "visibility") else 0.5
+    px = np.array([lm_a.x * w, lm_a.y * h])
+    if idx_b is not None:
+        lm_b = landmarks[idx_b]
+        vis_b = lm_b.visibility if hasattr(lm_b, "visibility") else 0.5
+        px = (px + np.array([lm_b.x * w, lm_b.y * h])) / 2
+        vis = (vis + vis_b) / 2
+    return px, float(vis)
+
+
+def _summarize_visibility_halves(per_view_vis: list[float]) -> tuple[float, float]:
+    """Collapse per-camera visibility into the 2-slot layout the SHM uses.
+
+    The on-wire layout still exposes exactly two per-camera confidences
+    (``cam1_vis`` / ``cam2_vis``) because the state machine only has two
+    degradation tiers (SINGLE_CAM_DEGRADED vs full). With N>2 cameras we
+    split them in halves and report the min of each — this keeps the
+    FusionEngine's asymmetric-loss detection meaningful without a wire
+    protocol change.
+
+    - N=1: both slots echo the single view's visibility
+    - N=2: unchanged — first slot is cam1, second is cam2
+    - N>=3: first slot = min of cam[0..N/2), second slot = min of cam[N/2..N)
+    """
+    n = len(per_view_vis)
+    if n == 0:
+        return 0.0, 0.0
+    if n == 1:
+        return per_view_vis[0], per_view_vis[0]
+    half = n // 2
+    first_half = per_view_vis[:max(half, 1)]
+    second_half = per_view_vis[max(half, 1):] or first_half
+    return min(first_half), min(second_half)
+
+
+def _process_landmarks(buf, landmark_sets, mv_calib, resolution, now):
+    """Extract 2D landmarks from each camera, triangulate, write to SHM.
+
+    ``landmark_sets`` is a list of ``pose_landmarks[0]`` per camera (or
+    ``None`` if that camera's detector didn't find a pose this frame).
+    ``mv_calib`` is a :class:`MultiViewCalibration` (possibly promoted
+    from legacy stereo) or ``None`` for monocular fallback.
+    """
     from .complementary_filter import JOINT_NAMES
-    from .stereo_calibration import triangulate_points
+    from .stereo_calibration import triangulate_multiview
 
     w, h = resolution
+    n_views = len(landmark_sets)
 
-    # MediaPipe landmark index → our joint index mapping
-    # Order must match JOINT_NAMES
-    mp_indices = {
-        "Hips": (23, 24),       # average of left+right hip
-        "Chest": (11, 12),      # average of left+right shoulder
-        "Head": (0, None),      # nose only
-        "LeftFoot": (27, None),
-        "RightFoot": (28, None),
-        "LeftKnee": (25, None),
-        "RightKnee": (26, None),
-        "LeftElbow": (13, None),
-        "RightElbow": (14, None),
-    }
+    # If calibration and config disagree on camera count, use the overlap.
+    usable_views = (
+        min(n_views, mv_calib.camera_count) if mv_calib is not None else n_views
+    )
 
     for i, joint_name in enumerate(JOINT_NAMES):
         if i >= len(buf):
             break
 
-        indices = mp_indices.get(joint_name)
+        indices = _MP_INDICES.get(joint_name)
         if indices is None:
             buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
             continue
 
         idx_a, idx_b = indices
 
-        # Get 2D pixel coordinates + visibility from camera 1
-        lm1_a = lm1[idx_a]
-        px1 = np.array([lm1_a.x * w, lm1_a.y * h])
-        vis1 = lm1_a.visibility if hasattr(lm1_a, 'visibility') else 0.5
+        per_view_px: list[np.ndarray] = []
+        per_view_vis: list[float] = []
+        for view_idx in range(n_views):
+            px, vis = _landmark_pixel_and_vis(
+                landmark_sets[view_idx], idx_a, idx_b, w, h
+            )
+            per_view_px.append(px)
+            per_view_vis.append(vis)
 
-        # Get 2D pixel coordinates from camera 2
-        lm2_a = lm2[idx_a]
-        px2 = np.array([lm2_a.x * w, lm2_a.y * h])
-        vis2 = lm2_a.visibility if hasattr(lm2_a, 'visibility') else 0.5
+        confidence = float(np.mean(per_view_vis)) if per_view_vis else 0.0
+        cam1_slot, cam2_slot = _summarize_visibility_halves(per_view_vis)
 
-        # Average if dual-landmark joint (hips, chest)
-        if idx_b is not None:
-            lm1_b = lm1[idx_b]
-            lm2_b = lm2[idx_b]
-            px1 = (px1 + np.array([lm1_b.x * w, lm1_b.y * h])) / 2
-            px2 = (px2 + np.array([lm2_b.x * w, lm2_b.y * h])) / 2
-            vis1 = (vis1 + (lm1_b.visibility if hasattr(lm1_b, 'visibility') else 0.5)) / 2
-            vis2 = (vis2 + (lm2_b.visibility if hasattr(lm2_b, 'visibility') else 0.5)) / 2
-
-        confidence = (vis1 + vis2) / 2.0
-
-        # Triangulate if calibration available
-        if calib is not None:
+        if mv_calib is not None and usable_views >= 2:
             try:
-                pts_3d = triangulate_points(
-                    calib,
-                    px1.reshape(1, 2),
-                    px2.reshape(1, 2),
+                points_per_view = [
+                    per_view_px[v].reshape(1, 2) for v in range(usable_views)
+                ]
+                confidences_per_view = [
+                    np.array([per_view_vis[v]]) for v in range(usable_views)
+                ]
+                pts_3d = triangulate_multiview(
+                    mv_calib, points_per_view, confidences_per_view
                 )
                 pos = pts_3d[0] / 1000.0  # mm → meters
-                buf[i] = [pos[0], pos[1], pos[2], vis1, vis2, confidence, now]
+                if not np.all(np.isfinite(pos)):
+                    buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+                    continue
+                buf[i] = [pos[0], pos[1], pos[2], cam1_slot, cam2_slot, confidence, now]
             except Exception:
                 buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
         else:
-            # Fallback: use MediaPipe's estimated z-depth (less accurate)
-            z_est = lm1_a.z * w  # MediaPipe z is relative to hip depth
-            pos_x = (lm1_a.x - 0.5) * 2.0  # Normalize to roughly -1..1
-            pos_y = -(lm1_a.y - 0.5) * 2.0
+            # Monocular fallback (single camera or missing calibration):
+            # use MediaPipe's relative z from the first available view.
+            first_lm = next(
+                (lms for lms in landmark_sets if lms is not None), None
+            )
+            if first_lm is None:
+                buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+                continue
+            lm_a = first_lm[idx_a]
+            z_est = lm_a.z * w
+            pos_x = (lm_a.x - 0.5) * 2.0
+            pos_y = -(lm_a.y - 0.5) * 2.0
             pos_z = -z_est / w
-            buf[i] = [pos_x, pos_y, pos_z, vis1, vis2, confidence * 0.5, now]
+            buf[i] = [pos_x, pos_y, pos_z, cam1_slot, cam2_slot, confidence * 0.5, now]

@@ -18,6 +18,7 @@ Triangulation Pipeline:
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -431,7 +432,10 @@ def save_multiview_calibration(
         arrays[f"D{i}"] = view.D
         arrays[f"R{i}"] = view.R_world
         arrays[f"T{i}"] = view.T_world
-    np.savez(path, **arrays)
+    # np.savez expects **arrays as ndarray kwargs; typeshed's stub narrows
+    # the final positional slot to bool, so cast through Any for the call.
+    _savez: Any = np.savez
+    _savez(path, **arrays)
     logger.info("Multi-view calibration saved to %s (%d cameras)", path, calib.camera_count)
 
 

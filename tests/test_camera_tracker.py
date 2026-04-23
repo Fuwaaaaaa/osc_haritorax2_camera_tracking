@@ -387,19 +387,15 @@ class TestCamIndicesList:
         cfg = CameraConfig(cam_indices=[0, 1])
         assert cfg.camera_count == 2
 
-    def test_three_or_more_cameras_warn_and_clip(self, caplog):
-        """3+ cameras currently fall back to using the first 2. True
-        multi-view triangulation is a future feature (tracked in TODOS)."""
-        caplog.set_level("WARNING", logger="osc_tracking.camera_tracker")
+    def test_three_or_more_cameras_all_used(self):
+        """3+ cameras are honored end-to-end via multi-view SVD-DLT.
+
+        The old behaviour clipped to the first two and emitted a warning;
+        the N-way worker now opens every index in ``cam_indices``.
+        """
         cfg = CameraConfig(cam_indices=[0, 1, 2, 3])
-        assert any(
-            "multi-view" in r.message.lower() or "more than" in r.message.lower()
-            for r in caplog.records
-        )
-        # Effective indices still expose the full list, but camera_count
-        # reports what will actually be opened.
-        assert cfg.effective_cam_indices == [0, 1]
-        assert cfg.camera_count == 2
+        assert cfg.effective_cam_indices == [0, 1, 2, 3]
+        assert cfg.camera_count == 4
 
     def test_zero_cameras_raises(self):
         with pytest.raises(ValueError):
