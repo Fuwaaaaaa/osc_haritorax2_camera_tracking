@@ -131,18 +131,18 @@ class VelocityPredictor:
 
         last = history.samples[-1]
         if t is None or len(history.samples) < 2:
-            return last.position.copy()
+            return np.asarray(last.position.copy())
 
         first = history.samples[0]
         span = last.t - first.t
         if span <= 0:
-            return last.position.copy()
+            return np.asarray(last.position.copy())
         velocity = (last.position - first.position) / span
 
         horizon = min(t - last.t, self.max_predict_seconds)
         if horizon <= 0:
-            return last.position.copy()
-        return last.position + velocity * horizon
+            return np.asarray(last.position.copy())
+        return np.asarray(last.position + velocity * horizon)
 
     def reset(self, joint_name: str) -> None:
         self._joints.pop(joint_name, None)
