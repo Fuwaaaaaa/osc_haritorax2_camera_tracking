@@ -20,16 +20,22 @@
 
 | デバイス | 接続経路 | ステータス | メモ |
 |---|---|---|---|
-| SlimeVR (native) | SlimeVR Server → OSC | 🟡 未検証 | SlimeVR Server Settings → OSC Output を有効化 |
-| Tundra Labs Trackers | SlimeVR Server → OSC | 🟡 未検証 | SlimeVR Server 経由なら同様に動作想定 |
-| その他 SlimeVR 互換 | SlimeVR Server → OSC | 🟡 未検証 | 6〜8 トラッカー想定 |
+| SlimeVR (native) | SlimeVR Server → OSC | 🟡 未検証 | [slimevr-setup-guide.md](slimevr-setup-guide.md) |
+| Tundra Labs Trackers | SlimeVR Server → OSC | 🟡 未検証 | [slimevr-setup-guide.md](slimevr-setup-guide.md) (SlimeVR Server 経由は共通) |
+| その他 SlimeVR 互換 | SlimeVR Server → OSC | 🟡 未検証 | 6〜8 トラッカー構成。[slimevr-setup-guide.md](slimevr-setup-guide.md) を参照 |
 
 ## 設定方法 (共通)
 
-1. SlimeVR Server の OSC Output を有効化し、送信先を `127.0.0.1:6969` に設定
-2. 本ミドルウェアの `config/default.json` で `osc_receiver.port` を 6969 に合わせる
+SlimeVR native / Tundra / その他 SlimeVR 互換トラッカーの詳細なセットアップ手順は
+**[slimevr-setup-guide.md](slimevr-setup-guide.md)** に移しました (OSC 出力の有効化、
+`connection_check` による疎通確認、マッピングがズレたときの対処まで)。
+
+要点のみ:
+
+1. SlimeVR Server の **Settings → OSC → OSC output** を **Enabled** にし、送信先を `127.0.0.1:6969` に設定
+2. 本ミドルウェアの `config/default.json` で `osc_receive_port` を 6969 に合わせる (デフォルト値と同じ)
 3. デフォルトのトラッカーマッピング: ID 1=Hips / 2=Chest / 3=LeftFoot / 4=RightFoot / 5=LeftKnee / 6=RightKnee / 7=LeftElbow / 8=RightElbow
-4. 異なる構成の場合は `src/osc_tracking/osc_receiver.py` の `OSCReceiver.DEFAULT_BONE_ADDRESSES` を参照してカスタマイズ
+4. 異なる構成の場合は [`src/osc_tracking/tracker_mapping.py`](../src/osc_tracking/tracker_mapping.py) を参照してカスタマイズ
 
 ## 動作報告の書き方
 

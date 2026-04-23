@@ -67,21 +67,16 @@
 ### ~~GitHub Issueテンプレート（デバイス互換性レポート）~~ ✅ 完了
 - **解決:** `.github/ISSUE_TEMPLATE/device-compat.yml` を作成。接続経路 (OSC / BLE / other) の dropdown、デバイス / トラッカー数 / OS / ファームウェア / osc-tracking バージョン / SlimeVR Server バージョン / 結果 (動作 / 部分 / 失敗) / 動いた箇所 / 詰まった箇所 / ログ、を必須・任意項目としてフォーム化。`config.yml` で contact link も追加。docs/other-trackers.md と docs/ble-direct-guide.md の誘導リンクを新 URL (`?template=device-compat.yml`) に更新。
 
-### SlimeVR 実機動作検証 + docs/slimevr-setup-guide.md
-- **What:** SlimeVR native トラッカーを実機テスト → docs/slimevr-setup-guide.md を作成 → other-trackers.md で SlimeVR を 🟡 未検証 → ✅ 動作確認 に昇格
-- **Why:** other-trackers.md は現状「原理的に動くはず」と書いてあるが実証されていない。実機確認できれば community の信頼性が跳ね上がる。リブランドの delivery 完成形
-- **Effort:** M（CC: 1時間、ただしハード所持が前提）
+### SlimeVR 実機動作検証
+- **What:** SlimeVR native トラッカーを実機テスト → other-trackers.md で SlimeVR を 🟡 未検証 → ✅ 動作確認 に昇格
+- **Why:** セットアップガイド ([docs/slimevr-setup-guide.md](docs/slimevr-setup-guide.md)) は公開済みだが、実機検証による動作証跡がまだない。実機確認できれば community の信頼性が跳ね上がる。リブランドの delivery 完成形
+- **Effort:** S (ハード所持後 CC: 30分)
 - **Priority:** P3
 - **Depends on:** SlimeVR native トラッカーの入手
-- **Context:** `osc_receiver.py:DEFAULT_BONE_ADDRESSES` は SlimeVR Server OSC output を直接受信するため、コード変更は理論上不要。セットアップガイドと動作証跡のみが必要
+- **Context:** `osc_receiver.py` は SlimeVR Server OSC output を直接受信するため、コード変更は理論上不要。動作証跡 (`connection_check` のログ、VRChat での追従動画など) のみが必要
 
-### 複数IMUトラッカー対応（SlimeVR, Tundra等）
-- **What:** HaritoraX2以外のIMUトラッカーからのOSCデータ受信対応
-- **Why:** リブランド後の自然な拡張。ユーザーベース拡大
-- **Context:** CEO Subagent #1, #2とも推奨
-- **Effort:** M（CC: 1時間）
-- **Priority:** P3
-- **Depends on:** リブランド完了後、SlimeVR 実機動作検証
+### ~~複数IMUトラッカー対応（SlimeVR, Tundra等）~~ ✅ 完了（ドキュメント）
+- **解決:** [docs/slimevr-setup-guide.md](docs/slimevr-setup-guide.md) を作成。SlimeVR native / Tundra Labs / その他 SlimeVR Server 互換トラッカー向けのセットアップ手順 (OSC 出力有効化、`connection_check` での疎通確認、マッピング不一致時の対処) を整備。[docs/other-trackers.md](docs/other-trackers.md) と README も新ガイドにリンク。コード変更は不要 (OSCReceiver は既に device-agnostic)。実機検証は「SlimeVR 実機動作検証」TODO で別途トラック。
 
 ### ~~N台カメラ対応（設定 API のみ）~~ ✅ 完了（scaffold）
 - **解決:** `CameraConfig.cam_indices: list[int]` + `effective_cam_indices` / `camera_count` プロパティ、`--cams 0,1` CLI フラグ、`config.cam_indices` 設定項目を追加。1台 (mono) / 2台 (stereo) に対応。3台以上は warn + 先頭2台のみ使用。legacy `cam1_index` / `cam2_index` は back-compat で維持。実際のマルチビュー三角測量 (3+ カメラの bundle adjustment) は別 TODO (下記「真のマルチビュー三角測量」)。
