@@ -321,10 +321,130 @@ def multiview_from_stereo(calib: StereoCalibration) -> MultiViewCalibration:
     )
 
 
+def _refine_single_point(
+    initial_xyz: np.ndarray,
+    projection_matrices: list[np.ndarray],
+    pixels: list[np.ndarray],
+    confidences: list[float],
+    max_nfev: int = 20,
+) -> np.ndarray:
+    """Non-linearly refine one 3D point by minimising weighted reprojection.
+
+    Residual is ``sqrt(conf_i) * (observed_ij - projected_ij)`` over every
+    view with positive confidence and finite pixel. LM is the standard
+    choice for this shape of problem and converges in a handful of
+    iterations when the DLT seed is already close.
+
+    Views with a point behind the camera (``Z <= 0``) contribute a large
+    fixed penalty so the optimiser is pushed back toward a physically
+    reasonable depth. This matters more than it sounds: a half-pixel
+    mirror can otherwise drag the estimate through the camera plane.
+    """
+    try:
+        from scipy.optimize import least_squares
+    except ImportError:  # pragma: no cover - scipy is a hard dep
+        return initial_xyz
+
+    def residuals(xyz: np.ndarray) -> np.ndarray:
+        X = np.array([xyz[0], xyz[1], xyz[2], 1.0])
+        res: list[float] = []
+        for P, uv, conf in zip(projection_matrices, pixels, confidences):
+            if conf <= 0.0:
+                continue
+            if not np.all(np.isfinite(uv)):
+                continue
+            projected = P @ X
+            z = projected[2]
+            if z <= 1e-9:
+                # Point is on or behind the camera plane — penalise hard.
+                res.extend([1e6, 1e6])
+                continue
+            u_hat = projected[0] / z
+            v_hat = projected[1] / z
+            sqrt_w = float(np.sqrt(conf))
+            res.append(sqrt_w * (float(uv[0]) - u_hat))
+            res.append(sqrt_w * (float(uv[1]) - v_hat))
+        return np.asarray(res, dtype=np.float64)
+
+    if not np.all(np.isfinite(initial_xyz)):
+        return initial_xyz
+
+    try:
+        # LM needs m residuals >= n parameters (3). Fall back if too few.
+        r0 = residuals(initial_xyz)
+        if r0.size < 3:
+            return initial_xyz
+        result = least_squares(
+            residuals,
+            initial_xyz.astype(np.float64),
+            method="lm",
+            max_nfev=max_nfev,
+        )
+    except (ValueError, np.linalg.LinAlgError):
+        return initial_xyz
+
+    refined = np.asarray(result.x, dtype=np.float64)
+    if not np.all(np.isfinite(refined)):
+        return initial_xyz
+    return refined
+
+
+def refine_multiview(
+    calib: MultiViewCalibration,
+    initial_points: np.ndarray,
+    points_per_view: list[np.ndarray],
+    confidences_per_view: list[np.ndarray] | None = None,
+    max_nfev: int = 20,
+) -> np.ndarray:
+    """Non-linear refinement on top of :func:`triangulate_multiview`.
+
+    The DLT solver is fast and unbiased under zero-noise ideal geometry
+    but algebraic — its residual doesn't equal pixel reprojection error,
+    so under real-world noise the DLT estimate is merely close, not
+    optimal. Bundle adjustment (here: point-only BA with fixed camera
+    poses) minimises the actual weighted reprojection residual from the
+    DLT starting point.
+
+    Points that came back NaN from DLT (under-constrained) are passed
+    through unchanged. The un-distorted pixel observations are computed
+    once per view and reused, matching the DLT path.
+    """
+    n_points = initial_points.shape[0]
+    if confidences_per_view is None:
+        confidences_per_view = [
+            np.ones(n_points, dtype=np.float64) for _ in calib.views
+        ]
+
+    # Undistort observations once (same as the DLT path).
+    undistorted_per_view: list[np.ndarray] = []
+    for view, pts in zip(calib.views, points_per_view):
+        pts_reshaped = pts.reshape(-1, 1, 2).astype(np.float64)
+        undist = cv2.undistortPoints(pts_reshaped, view.K, view.D, P=view.K)
+        undistorted_per_view.append(undist.reshape(-1, 2))
+
+    projection_matrices = [view.P for view in calib.views]
+
+    refined = initial_points.copy()
+    for pt_idx in range(n_points):
+        if not np.all(np.isfinite(initial_points[pt_idx])):
+            continue
+        pixels_for_pt = [undist[pt_idx] for undist in undistorted_per_view]
+        confs_for_pt = [float(c[pt_idx]) for c in confidences_per_view]
+        refined[pt_idx] = _refine_single_point(
+            initial_points[pt_idx],
+            projection_matrices,
+            pixels_for_pt,
+            confs_for_pt,
+            max_nfev=max_nfev,
+        )
+    return np.asarray(refined)
+
+
 def triangulate_multiview(
     calib: MultiViewCalibration,
     points_per_view: list[np.ndarray],
     confidences_per_view: list[np.ndarray] | None = None,
+    refine: bool = False,
 ) -> np.ndarray:
     """Triangulate Nx3 world points from N camera views using SVD-based DLT.
 
@@ -348,6 +468,10 @@ def triangulate_multiview(
         confidences_per_view: optional length-K list of length-N arrays
             with per-observation confidences in [0, 1]. Views contributing
             <= 0 confidence drop out of the system for that point.
+        refine: when True, run a non-linear bundle-adjustment refinement
+            over the DLT estimate (see :func:`refine_multiview`). Adds
+            a few ms per point — worth it for 3+ camera rigs where the
+            redundancy can actually reduce reprojection error.
 
     Returns:
         Nx3 array of 3D points in the world frame defined by ``calib.views[0]``.
@@ -407,6 +531,11 @@ def triangulate_multiview(
         if abs(X[3]) < 1e-9:
             continue
         out[pt_idx] = X[:3] / X[3]
+
+    if refine:
+        out = refine_multiview(
+            calib, out, points_per_view, confidences_per_view
+        )
 
     return out
 
