@@ -408,6 +408,70 @@ class TestCamIndicesList:
         assert cfg.effective_cam_indices == [5, 6]
 
 
+class TestSummarizeVisibilityHalves:
+    """The SHM still exposes exactly two per-camera visibility slots.
+    This helper collapses N>=3 camera visibilities into two slots that
+    preserve the FusionEngine's asymmetric-loss detection."""
+
+    def test_empty_list(self):
+        from osc_tracking.camera_tracker import _summarize_visibility_halves
+        assert _summarize_visibility_halves([]) == (0.0, 0.0)
+
+    def test_single_camera_echoes_to_both_slots(self):
+        from osc_tracking.camera_tracker import _summarize_visibility_halves
+        assert _summarize_visibility_halves([0.8]) == (0.8, 0.8)
+
+    def test_stereo_preserves_per_camera_visibility(self):
+        from osc_tracking.camera_tracker import _summarize_visibility_halves
+        assert _summarize_visibility_halves([0.9, 0.2]) == (0.9, 0.2)
+
+    def test_three_views_split_into_halves(self):
+        from osc_tracking.camera_tracker import _summarize_visibility_halves
+        # half = 3 // 2 = 1; first half = [0.9], second = [0.8, 0.7]
+        slot1, slot2 = _summarize_visibility_halves([0.9, 0.8, 0.7])
+        assert slot1 == 0.9
+        assert slot2 == 0.7  # min of [0.8, 0.7]
+
+    def test_four_views_split_evenly(self):
+        from osc_tracking.camera_tracker import _summarize_visibility_halves
+        # half = 2; slot1 = min([0.9, 0.4]) = 0.4; slot2 = min([0.8, 0.7]) = 0.7
+        assert _summarize_visibility_halves([0.9, 0.4, 0.8, 0.7]) == (0.4, 0.7)
+
+
+class TestZeroJointHelpers:
+    """Central "no data this frame" writer so layout changes don't
+    require updating a dozen inline literals."""
+
+    def test_zero_joint_writes_zeros_with_timestamp(self):
+        import numpy as np
+        from osc_tracking.camera_tracker import (
+            FLOATS_PER_JOINT,
+            JOINT_COUNT,
+            _zero_joint,
+        )
+
+        buf = np.ones((JOINT_COUNT, FLOATS_PER_JOINT), dtype=np.float64)
+        _zero_joint(buf, 3, 42.0)
+        # Every non-timestamp field zeroed, timestamp in the last slot.
+        assert (buf[3, :-1] == 0.0).all()
+        assert buf[3, -1] == 42.0
+        # Other rows untouched.
+        assert (buf[0] == 1.0).all()
+
+    def test_zero_all_joints_clears_every_row(self):
+        import numpy as np
+        from osc_tracking.camera_tracker import (
+            FLOATS_PER_JOINT,
+            JOINT_COUNT,
+            _zero_all_joints,
+        )
+
+        buf = np.ones((JOINT_COUNT, FLOATS_PER_JOINT), dtype=np.float64)
+        _zero_all_joints(buf, 7.5)
+        assert (buf[:, :-1] == 0.0).all()
+        assert (buf[:, -1] == 7.5).all()
+
+
 class TestRefineTriangulationDefault:
     """The tri-state ``refine_triangulation`` field auto-resolves to a bool
     based on camera count when left unset."""

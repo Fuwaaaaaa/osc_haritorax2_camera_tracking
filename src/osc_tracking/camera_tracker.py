@@ -81,6 +81,23 @@ def _next_monotonic_ms(prev_ms: int) -> int:
 _shm_name_counter = 0
 
 
+def _zero_joint(buf: np.ndarray, i: int, now: float) -> None:
+    """Write the "no data this frame" marker for one joint slot.
+
+    Centralises the per-slot layout so a change to FLOATS_PER_JOINT
+    doesn't require updating a dozen inline literals. The timestamp is
+    still recorded so downstream staleness checks see the slot was
+    touched this cycle, just with zero confidence.
+    """
+    buf[i] = [0.0] * (FLOATS_PER_JOINT - 1) + [now]
+
+
+def _zero_all_joints(buf: np.ndarray, now: float) -> None:
+    """Mark every joint as unobserved for this frame."""
+    for i in range(JOINT_COUNT):
+        _zero_joint(buf, i, now)
+
+
 def _unique_shm_name() -> str:
     """Return a fresh shared-memory name that won't collide with a leaked
     SHM from a previously crashed instance. The PID-only scheme used before
@@ -336,6 +353,55 @@ def _load_multiview_or_stereo(calibration_file: str):
     return None
 
 
+def _init_pose_landmarkers(config: CameraConfig, count: int) -> list:
+    """Build one MediaPipe PoseLandmarker per camera.
+
+    MediaPipe's VIDEO-mode detector is stateful per call, so cameras
+    must not share an instance. Returns an empty list on any init
+    failure; callers treat that as "no pose data available" rather
+    than aborting the worker.
+    """
+    try:
+        import mediapipe as mp_lib  # noqa: F401
+        from mediapipe.tasks.python import BaseOptions, vision
+    except Exception as exc:
+        logging.error("MediaPipe init failed (import): %s", exc)
+        return []
+
+    model_path = _resolve_model_path(config.model_path, config.model_path_lite)
+    if model_path is None:
+        logging.error(
+            "MediaPipe model not found or outside the project tree. "
+            "Download from: "
+            "https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker#models "
+            "and place at %s",
+            config.model_path,
+        )
+        return []
+
+    try:
+        options = vision.PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=str(model_path)),
+            running_mode=vision.RunningMode.VIDEO,
+            num_poses=1,
+            min_pose_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
+        instances = [
+            vision.PoseLandmarker.create_from_options(options)
+            for _ in range(count)
+        ]
+    except Exception as exc:
+        logging.error("MediaPipe init failed (instantiate): %s", exc)
+        return []
+
+    logging.info(
+        "MediaPipe Pose Landmarker loaded: %s (%d instances)",
+        model_path, len(instances),
+    )
+    return instances
+
+
 def _camera_worker(
     config: CameraConfig,
     shm_name: str,
@@ -395,41 +461,7 @@ def _camera_worker(
             len(cam_indices),
         )
 
-    # Initialize MediaPipe Pose Landmarker — one instance per camera.
-    pose_instances: list = []
-    try:
-        import mediapipe as mp_lib  # noqa: F401
-        from mediapipe.tasks.python import BaseOptions, vision
-
-        model_path = _resolve_model_path(config.model_path, config.model_path_lite)
-        if model_path is None:
-            logging.error(
-                "MediaPipe model not found or outside the project tree. "
-                "Download from: "
-                "https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker#models "
-                "and place at %s",
-                config.model_path,
-            )
-        else:
-            options = vision.PoseLandmarkerOptions(
-                base_options=BaseOptions(model_asset_path=str(model_path)),
-                running_mode=vision.RunningMode.VIDEO,
-                num_poses=1,
-                min_pose_detection_confidence=0.5,
-                min_tracking_confidence=0.5,
-            )
-            # One stateful PoseLandmarker per camera — the detector keeps
-            # per-call history and can't be shared across views.
-            pose_instances = [
-                vision.PoseLandmarker.create_from_options(options)
-                for _ in cam_indices
-            ]
-            logging.info(
-                "MediaPipe Pose Landmarker loaded: %s (%d instances)",
-                model_path, len(pose_instances),
-            )
-    except Exception as e:
-        logging.error("MediaPipe init failed: %s", e)
+    pose_instances = _init_pose_landmarkers(config, len(cam_indices))
 
     consecutive_failures = 0
     frame_ts_ms = 0  # MediaPipe VIDEO mode needs monotonic timestamp in ms
@@ -477,18 +509,15 @@ def _camera_worker(
                         )
                 else:
                     with shm_lock:
-                        for i in range(JOINT_COUNT):
-                            buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+                        _zero_all_joints(buf, now)
 
             except Exception as e:
                 logging.warning("MediaPipe inference failed: %s", e)
                 with shm_lock:
-                    for i in range(JOINT_COUNT):
-                        buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+                    _zero_all_joints(buf, now)
         else:
             with shm_lock:
-                for i in range(JOINT_COUNT):
-                    buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+                _zero_all_joints(buf, now)
 
         # Frame rate control
         elapsed = time.monotonic() - loop_start
@@ -598,7 +627,7 @@ def _process_landmarks(buf, landmark_sets, mv_calib, resolution, now, refine=Fal
 
         indices = _MP_INDICES.get(joint_name)
         if indices is None:
-            buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+            _zero_joint(buf, i, now)
             continue
 
         idx_a, idx_b = indices
@@ -629,11 +658,11 @@ def _process_landmarks(buf, landmark_sets, mv_calib, resolution, now, refine=Fal
                 )
                 pos = pts_3d[0] / 1000.0  # mm → meters
                 if not np.all(np.isfinite(pos)):
-                    buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+                    _zero_joint(buf, i, now)
                     continue
                 buf[i] = [pos[0], pos[1], pos[2], cam1_slot, cam2_slot, confidence, now]
             except Exception:
-                buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+                _zero_joint(buf, i, now)
         else:
             # Monocular fallback (single camera or missing calibration):
             # use MediaPipe's relative z from the first available view.
@@ -641,7 +670,7 @@ def _process_landmarks(buf, landmark_sets, mv_calib, resolution, now, refine=Fal
                 (lms for lms in landmark_sets if lms is not None), None
             )
             if first_lm is None:
-                buf[i] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, now]
+                _zero_joint(buf, i, now)
                 continue
             lm_a = first_lm[idx_a]
             z_est = lm_a.z * w
