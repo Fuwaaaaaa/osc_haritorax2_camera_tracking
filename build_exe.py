@@ -65,6 +65,10 @@ HIDDEN_IMPORTS = [
     "bleak.backends.winrt.client",
     "bleak.backends.winrt.scanner",
     "bleak.backends.winrt.util",
+    # Serial direct receiver (experimental)
+    "osc_tracking.serial_receiver",
+    "serial",
+    "serial.tools.list_ports",
 ]
 
 
