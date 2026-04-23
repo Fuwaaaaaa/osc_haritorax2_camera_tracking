@@ -534,3 +534,21 @@ class TestPosePredictorIntegration:
         )
         engine.update()
         assert engine.predictor.predict("Hips") is None
+
+
+class TestApplySmoothingPreset:
+    """The public API that replaces writing to engine.filter internals
+    from main.py."""
+
+    def test_applies_preset_values_to_filter(self, engine):
+        from osc_tracking.motion_smoothing import SmoothingPreset
+
+        preset = SmoothingPreset(
+            name="custom",
+            smooth_rate=12.5,
+            noise_threshold=0.07,
+            prediction_weight=0.3,
+        )
+        engine.apply_smoothing_preset(preset)
+        assert engine.filter.SMOOTH_RATE == 12.5
+        assert engine.filter.DRIFT_VELOCITY_THRESHOLD == 0.07
