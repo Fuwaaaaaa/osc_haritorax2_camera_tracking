@@ -151,6 +151,86 @@ def test_rest_api_allows_same_origin_reset():
         api.stop()
 
 
+def test_rest_api_config_get_hides_sensitive_fields():
+    """/api/config is CORS-open for dashboards, so it must not include
+    paths, hostnames, or COM ports that a cross-origin tab could pull
+    out via fetch."""
+    from osc_tracking.config import TrackingConfig
+    from osc_tracking.rest_api import RestAPI
+
+    cfg = TrackingConfig()
+    # Populate several sensitive fields so we can assert they're filtered.
+    cfg.osc_send_host = "10.0.0.5"
+    cfg.serial_port = "COM3"
+    cfg.calibration_file = "C:/private/calib.npz"
+    cfg.model_path = "C:/private/models/pose.task"
+
+    port = _free_port()
+    api = RestAPI(port=port, config=cfg)
+    api.start()
+    try:
+        _wait_for_server(port)
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/config", timeout=2.0) as resp:
+            body = json.loads(resp.read())
+    finally:
+        api.stop()
+
+    for leaky in ("osc_send_host", "serial_port", "calibration_file",
+                  "model_path", "ble_local_name_to_bone",
+                  "serial_tracker_id_to_bone"):
+        assert leaky not in body, f"sensitive field {leaky!r} leaked through /api/config"
+    # But safe operational knobs stay visible so dashboards still work.
+    assert "target_fps" in body
+    assert "receiver_type" in body
+
+
+def test_rest_api_post_body_cap_prevents_dos():
+    """A malicious Content-Length must not cause the handler to block
+    on a multi-gigabyte read. The cap is exposed so tests can assert
+    a specific bound without hard-coding magic numbers here."""
+    from osc_tracking.rest_api import MAX_REQUEST_BODY
+
+    assert 1_024 <= MAX_REQUEST_BODY <= 1_024 * 1_024  # 1 KiB..1 MiB
+
+
+# ---------- MediaPipe model path traversal ----------
+
+def test_mediapipe_model_path_rejects_traversal(tmp_path, caplog):
+    """A config-supplied model path pointing outside the project tree
+    (e.g. ``../../etc/passwd``) must be refused before it reaches
+    MediaPipe's native loader."""
+    from osc_tracking.camera_tracker import _resolve_model_path
+
+    # Create a file outside the project so "exists" alone isn't enough.
+    outside = tmp_path / "fake_model.task"
+    outside.write_bytes(b"not a real model")
+    with caplog.at_level("WARNING"):
+        resolved = _resolve_model_path(str(outside), str(outside))
+    assert resolved is None
+    assert any("outside the project root" in r.message for r in caplog.records)
+
+
+def test_mediapipe_model_path_accepts_inside_project():
+    """Files that resolve inside the project tree pass through."""
+    from osc_tracking.camera_tracker import _resolve_model_path
+
+    # CLAUDE.md lives at the project root; use it as a stand-in path
+    # that definitely exists inside the tree.
+    project_root = Path(__file__).resolve().parent.parent
+    inside_ok = project_root / "CLAUDE.md"
+    resolved = _resolve_model_path(str(inside_ok), str(inside_ok))
+    assert resolved is not None
+    assert resolved == inside_ok.resolve()
+
+
+def test_mediapipe_model_path_returns_none_when_missing(tmp_path):
+    """Neither path exists → None, handler logs an instructive error."""
+    from osc_tracking.camera_tracker import _resolve_model_path
+
+    missing = tmp_path / "nope.task"
+    assert _resolve_model_path(str(missing), str(missing)) is None
+
+
 def _free_port() -> int:
     """Get a free port from the OS."""
     import socket

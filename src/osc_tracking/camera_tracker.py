@@ -271,6 +271,43 @@ class CameraTracker:
         return self._process is not None and self._process.is_alive()
 
 
+def _resolve_model_path(primary: str, fallback: str) -> Path | None:
+    """Return the MediaPipe model path if it resolves inside the project.
+
+    Config-supplied paths come from a JSON file on disk which the user
+    may or may not audit. Containing the model to the project tree
+    prevents a config smuggle like ``"model_path": "/etc/shadow"`` from
+    handing MediaPipe an arbitrary file descriptor, and forces a caller
+    who needs an out-of-tree model to do it explicitly (not via config).
+
+    Returns ``None`` when neither path exists or both escape the project
+    root — the caller then logs an instructive error instead of feeding
+    a hostile path into the native library.
+    """
+    project_root = Path(__file__).resolve().parent.parent.parent
+
+    def _safe_within_root(candidate: str) -> Path | None:
+        if not candidate:
+            return None
+        try:
+            resolved = Path(candidate).resolve()
+        except OSError:
+            return None
+        if not resolved.exists():
+            return None
+        try:
+            resolved.relative_to(project_root)
+        except ValueError:
+            logger.warning(
+                "MediaPipe model path %s resolves outside the project root "
+                "(%s); refusing to load.", resolved, project_root,
+            )
+            return None
+        return resolved
+
+    return _safe_within_root(primary) or _safe_within_root(fallback)
+
+
 def _load_multiview_or_stereo(calibration_file: str):
     """Load calibration as MultiViewCalibration, promoting stereo if needed.
 
@@ -364,19 +401,18 @@ def _camera_worker(
         import mediapipe as mp_lib  # noqa: F401
         from mediapipe.tasks.python import BaseOptions, vision
 
-        model_path = config.model_path
-        if not Path(model_path).exists():
-            model_path = config.model_path_lite
-        if not Path(model_path).exists():
+        model_path = _resolve_model_path(config.model_path, config.model_path_lite)
+        if model_path is None:
             logging.error(
-                "MediaPipe model not found. Download from: "
+                "MediaPipe model not found or outside the project tree. "
+                "Download from: "
                 "https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker#models "
                 "and place at %s",
                 config.model_path,
             )
         else:
             options = vision.PoseLandmarkerOptions(
-                base_options=BaseOptions(model_asset_path=model_path),
+                base_options=BaseOptions(model_asset_path=str(model_path)),
                 running_mode=vision.RunningMode.VIDEO,
                 num_poses=1,
                 min_pose_detection_confidence=0.5,
