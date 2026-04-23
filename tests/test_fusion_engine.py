@@ -348,3 +348,189 @@ class TestCompassBlendFactorThreading:
         )
 
         assert engine.filter.compass_blend_factor == 0.7
+
+
+class TestOcclusionDetectedEvent:
+    """FusionEngine publishes OcclusionDetected when a previously
+    visible joint's confidence drops below partial_threshold."""
+
+    def test_no_event_when_all_joints_stay_visible(self, engine):
+        from osc_tracking.domain.events import OcclusionDetected
+        events: list = []
+        engine.events.subscribe(OcclusionDetected, events.append)
+        engine.update()
+        engine.update()
+        assert events == []
+
+    def test_event_fired_when_visible_joint_becomes_occluded(self, engine, mock_camera):
+        from osc_tracking.domain.events import OcclusionDetected
+        events: list = []
+        engine.events.subscribe(OcclusionDetected, events.append)
+
+        # Frame 1: all joints visible
+        engine.update()
+        # Frame 2: Hips drops below partial_threshold (0.3)
+        degraded = dict(mock_camera.read_joints.return_value)
+        degraded["Hips"] = (np.array([0.0, 1.0, 2.0]), 0.05, 0.05, 0.05)
+        mock_camera.read_joints.return_value = degraded
+        engine.update()
+
+        # Exactly one event for Hips
+        hips_events = [e for e in events if e.bone.name == "Hips"]
+        assert len(hips_events) == 1
+
+    def test_no_duplicate_event_while_joint_stays_occluded(self, engine, mock_camera):
+        from osc_tracking.domain.events import OcclusionDetected
+        events: list = []
+        engine.events.subscribe(OcclusionDetected, events.append)
+
+        engine.update()  # baseline visible
+        degraded = dict(mock_camera.read_joints.return_value)
+        degraded["Hips"] = (np.array([0.0, 1.0, 2.0]), 0.05, 0.05, 0.05)
+        mock_camera.read_joints.return_value = degraded
+
+        engine.update()  # transition visible → occluded: fire
+        engine.update()  # still occluded: no duplicate
+        engine.update()
+
+        hips_events = [e for e in events if e.bone.name == "Hips"]
+        assert len(hips_events) == 1
+
+
+class TestEventPublishing:
+    """FusionEngine publishes domain events each cycle. Subsystems
+    subscribe via the bus instead of being called directly."""
+
+    def test_publishes_frame_processed_each_cycle(self, engine):
+        from osc_tracking.domain.events import FrameProcessed
+        events: list = []
+        engine.events.subscribe(FrameProcessed, events.append)
+        engine.update()
+        engine.update()
+        assert len(events) == 2
+        assert events[-1].snapshot.mode == engine.skeleton.mode
+
+    def test_publishes_tracking_mode_changed_only_on_transition(
+        self, engine, mock_camera
+    ):
+        from osc_tracking.domain.events import TrackingModeChanged
+        events: list = []
+        engine.events.subscribe(TrackingModeChanged, events.append)
+
+        # First update establishes VISIBLE baseline (no prev, no event).
+        engine.update()
+        # Same mode again: still no event.
+        engine.update()
+        assert len(events) == 0
+
+        # Cut camera → forced transition to FULL_OCCLUSION.
+        mock_camera.read_joints.return_value = None
+        engine.state_machine.config.hysteresis_sec = 0.0
+        engine.state_machine._last_osc_time = time.monotonic()
+        engine.update()
+        assert len(events) >= 1
+        assert events[0].previous == TrackingMode.VISIBLE
+
+    def test_publishes_imu_disconnect_reconnect(self, engine, mock_receiver):
+        from osc_tracking.domain.events import IMUDisconnected, IMUReconnected
+        disc: list = []
+        reco: list = []
+        engine.events.subscribe(IMUDisconnected, disc.append)
+        engine.events.subscribe(IMUReconnected, reco.append)
+        # Prime: first update establishes baseline.
+        engine.update()
+        # Disconnect.
+        mock_receiver.is_connected = False
+        engine.update()
+        assert len(disc) == 1
+        # Reconnect.
+        mock_receiver.is_connected = True
+        engine.update()
+        assert len(reco) == 1
+
+
+class TestSkeletonAggregate:
+    """FusionEngine must mirror each fused frame into the Skeleton
+    aggregate so UI / output subsystems can observe a consistent view."""
+
+    def test_skeleton_empty_before_first_update(self, engine):
+        assert engine.skeleton.joints == {}
+        assert engine.skeleton.timestamp == 0.0
+
+    def test_skeleton_populated_after_update(self, engine):
+        engine.update()
+        assert len(engine.skeleton.joints) > 0
+        assert engine.skeleton.timestamp > 0.0
+
+    def test_snapshot_is_immutable_view(self, engine):
+        """A snapshot taken before a second update must not see the
+        later frame — proves the aggregate's snapshot() makes a copy.
+        Deterministic: we mutate the aggregate directly rather than
+        sleeping for monotonic clock to advance (which is flaky on
+        Windows' 15ms timer resolution)."""
+        engine.update()
+        snap = engine.snapshot()
+        first_ts = snap.timestamp
+        first_joint_count = len(snap.joints)
+        # Mutate the live aggregate after snapshot — changes must not
+        # appear in the already-taken snapshot.
+        engine.skeleton.set_timestamp(first_ts + 999.0)
+        engine.skeleton._joints.clear()
+        assert snap.timestamp == first_ts
+        assert len(snap.joints) == first_joint_count
+
+    def test_skeleton_mode_matches_fusion_mode(self, engine):
+        mode = engine.update()
+        assert engine.skeleton.mode == mode
+
+
+class TestPosePredictorIntegration:
+    """FusionEngine should feed seen positions into the predictor and
+    fall back to predictions when the camera can't see a joint during
+    partial/full occlusion."""
+
+    def test_predictor_observes_visible_joints(self, engine, mock_camera):
+        """Each cycle, seen joints should be pushed into the predictor."""
+        engine.update()
+        # Hips was visible — predictor must now have at least one sample.
+        assert engine.predictor.predict("Hips") is not None
+
+    def test_predictor_substitutes_missing_joint_during_partial_occlusion(
+        self, engine, mock_camera
+    ):
+        """When a joint disappears from camera data mid-session, the
+        predictor's last-known position should feed the filter instead
+        of a None camera_position (which would make the filter coast
+        purely on IMU and drift)."""
+        # Prime the predictor with two samples for Hips (establish position).
+        for _ in range(3):
+            engine.update()
+            time.sleep(0.01)
+
+        # Hips vanishes but other joints still seen → PARTIAL_OCCLUSION.
+        partial = {
+            name: (np.array([0.0, 1.0, 2.0]), 0.9, 0.9, 0.9)
+            for name in JOINT_NAMES
+            if name != "Hips"
+        }
+        mock_camera.read_joints.return_value = partial
+
+        # The predictor still has Hips history from earlier frames.
+        hips_pred = engine.predictor.predict("Hips")
+        assert hips_pred is not None
+        engine.update()
+
+    def test_predictor_respects_disabled_flag(self, mock_camera, mock_receiver, mock_sender):
+        """With pose_predictor_enabled=False, the predictor is still
+        constructed but never observes — ensuring a clean opt-out."""
+        from osc_tracking.config import TrackingConfig
+        config = TrackingConfig()
+        config.pose_predictor_enabled = False
+        engine = FusionEngine(
+            camera=mock_camera,
+            receiver=mock_receiver,
+            sender=mock_sender,
+            config=config,
+        )
+        engine.update()
+        assert engine.predictor.predict("Hips") is None

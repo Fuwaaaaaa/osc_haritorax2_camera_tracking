@@ -34,15 +34,30 @@ import time
 
 import numpy as np
 
-from .camera_tracker import CameraTracker
+from .application import EventBus
+from .camera_protocol import VisionProvider
 from .complementary_filter import JOINT_NAMES, ComplementaryFilter
 from .config import TrackingConfig
+from .domain import BoneId, Confidence, Position3D, Skeleton, SkeletonSnapshot
+from .domain.events import (
+    FrameProcessed,
+    IMUDisconnected,
+    IMUReconnected,
+    OcclusionDetected,
+    TrackingModeChanged,
+)
 from .osc_sender import OSCSender, TrackerOutput
+from .pose_predictor import VelocityPredictor
 from .receiver_protocol import IMUReceiver
 from .state_machine import ModeConfig, TrackingMode, TrackingStateMachine
 from .visual_compass import compute_shoulder_yaw, correct_heading
 
 logger = logging.getLogger(__name__)
+
+# Confidence assigned to predictor-substituted positions during occlusion.
+# Deliberately below the default partial_threshold (0.3) so the fusion
+# filter keeps the IMU as the primary truth source.
+PREDICTED_CONFIDENCE = 0.2
 
 
 class FusionEngine:
@@ -50,10 +65,11 @@ class FusionEngine:
 
     def __init__(
         self,
-        camera: CameraTracker,
+        camera: VisionProvider,
         receiver: IMUReceiver,
         sender: OSCSender,
         config: TrackingConfig | None = None,
+        event_bus: EventBus | None = None,
     ):
         self.camera = camera
         self.receiver = receiver
@@ -80,6 +96,28 @@ class FusionEngine:
             visible_threshold=self.config.visible_threshold,
             partial_threshold=self.config.partial_threshold,
         )
+        self.predictor = VelocityPredictor(
+            max_history=self.config.pose_predictor_max_history,
+            stale_window_seconds=self.config.pose_predictor_stale_window_sec,
+            max_predict_seconds=self.config.pose_predictor_max_predict_sec,
+        )
+        # Aggregate root — mirrors the fused state each cycle so UI /
+        # output subsystems can observe a consistent frame snapshot
+        # regardless of when they poll.
+        self.skeleton = Skeleton()
+        # Events: every fusion cycle publishes FrameProcessed; mode
+        # transitions publish TrackingModeChanged; IMU link state flips
+        # publish IMUDisconnected / IMUReconnected. Subsystems subscribe
+        # instead of being called directly from main.py.
+        self.events = event_bus or EventBus()
+        self._prev_mode: TrackingMode | None = None
+        self._prev_imu_connected: bool | None = None
+        # Per-joint occlusion latch: True while the joint is currently
+        # below partial_threshold. Used to fire OcclusionDetected only
+        # on the visible→occluded edge, not every frame the joint stays
+        # occluded.
+        self._joint_occluded: dict[str, bool] = {}
+        self._fps_ema: float = 0.0  # EMA-smoothed FPS for event consumers
         self._last_update: float = time.monotonic()
         self._running = False
 
@@ -95,6 +133,14 @@ class FusionEngine:
 
         # Clamp dt to prevent explosion after pause/sleep
         dt = min(dt, 0.1)
+
+        # Update FPS estimate for event consumers (EMA with alpha=0.1)
+        if dt > 0:
+            inst_fps = 1.0 / dt
+            self._fps_ema = (
+                inst_fps if self._fps_ema == 0.0
+                else 0.9 * self._fps_ema + 0.1 * inst_fps
+            )
 
         # Read camera data (per-camera confidence from SharedMemory)
         camera_joints = self.camera.read_joints()
@@ -122,14 +168,60 @@ class FusionEngine:
         # Update state machine
         mode = self.state_machine.update(cam1_conf, cam2_conf, now)
 
+        # Feed the predictor every visible joint so it can extrapolate
+        # positions that disappear in the next occlusion window.
+        if self.config.pose_predictor_enabled and camera_joints:
+            for jname, (pos, conf, _, _) in camera_joints.items():
+                if conf >= self.config.partial_threshold:
+                    self.predictor.observe(jname, pos, now)
+
         # Fuse each joint
         outputs: list[TrackerOutput] = []
         is_futon = mode == TrackingMode.FUTON_MODE
+        occluded = mode in (TrackingMode.FULL_OCCLUSION, TrackingMode.PARTIAL_OCCLUSION)
         for joint_name in JOINT_NAMES:
             camera_pos = None
             confidence = 0.0
             if not is_futon and camera_joints and joint_name in camera_joints:
                 camera_pos, confidence, _, _ = camera_joints[joint_name]
+
+            # Per-joint occlusion edge detection: fire OcclusionDetected
+            # only when a joint was visible in a prior frame and drops
+            # below partial_threshold this frame. Joints never observed
+            # visible don't count as "becoming occluded" — they simply
+            # never arrived.
+            is_raw_occluded = confidence < self.config.partial_threshold
+            prev = self._joint_occluded.get(joint_name)  # True/False/None
+            if prev is False and is_raw_occluded:
+                try:
+                    self.events.publish(OcclusionDetected(
+                        timestamp=now,
+                        bone=BoneId(joint_name),
+                    ))
+                except ValueError:
+                    pass  # non-canonical bone name; skip
+            # Only record state after a joint has been observed visible
+            # at least once, so first-frame "occluded" from an unseen
+            # joint doesn't latch as a transition target.
+            if not is_raw_occluded or prev is not None:
+                self._joint_occluded[joint_name] = is_raw_occluded
+
+            # Predictor fallback: during occlusion, substitute a predicted
+            # position (at reduced confidence) when the camera has nothing
+            # to say. Skip in FUTON mode where the filter already trusts
+            # IMU exclusively.
+            if (
+                self.config.pose_predictor_enabled
+                and not is_futon
+                and occluded
+                and camera_pos is None
+            ):
+                predicted = self.predictor.predict(joint_name, now)
+                if predicted is not None:
+                    camera_pos = predicted
+                    # Stay just below partial_threshold so the filter weighs
+                    # IMU more than the predicted camera position.
+                    confidence = PREDICTED_CONFIDENCE
 
             imu_rotation = self.receiver.get_bone_rotation(joint_name)
 
@@ -175,10 +267,60 @@ class FusionEngine:
                 joint_name=joint_name,
             ))
 
+            # Mirror the fused joint into the aggregate for downstream
+            # observers. Domain types enforce invariants (finite position,
+            # [0,1] confidence) so a malformed state surfaces here, not
+            # deep inside a subsystem.
+            try:
+                self.skeleton.update_joint(
+                    BoneId(joint_name),
+                    Position3D.from_array(state.position),
+                    state.rotation,
+                    Confidence(min(max(float(confidence), 0.0), 1.0)),
+                )
+            except ValueError:
+                # Filter produced a non-finite position — drop from the
+                # aggregate this frame (the legacy TrackerOutput path
+                # still carries the raw numbers).
+                pass
+
+        self.skeleton.set_mode(mode)
+        self.skeleton.set_timestamp(now)
+
         # Send to VRChat
         self.sender.send(outputs)
 
+        # Publish domain events. Subsystems subscribe in main.py.
+        self._publish_frame_events(mode, now)
+
         return mode
+
+    def _publish_frame_events(self, mode: TrackingMode, now: float) -> None:
+        """Emit per-frame and transition events."""
+        if self._prev_mode is not None and self._prev_mode != mode:
+            self.events.publish(TrackingModeChanged(
+                timestamp=now,
+                previous=self._prev_mode,
+                current=mode,
+            ))
+        self._prev_mode = mode
+
+        imu_connected = self.receiver.is_connected
+        if self._prev_imu_connected is True and imu_connected is False:
+            self.events.publish(IMUDisconnected(timestamp=now))
+        elif self._prev_imu_connected is False and imu_connected is True:
+            self.events.publish(IMUReconnected(timestamp=now))
+        self._prev_imu_connected = imu_connected
+
+        self.events.publish(FrameProcessed(
+            timestamp=now,
+            snapshot=self.skeleton.snapshot(),
+            fps=self._fps_ema,
+        ))
+
+    def snapshot(self) -> SkeletonSnapshot:
+        """Return an immutable frame snapshot for observers."""
+        return self.skeleton.snapshot()
 
     def start(self) -> None:
         """Start all subsystems."""
