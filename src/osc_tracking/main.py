@@ -6,8 +6,6 @@ import signal
 import sys
 import time
 
-from scipy.spatial.transform import Rotation
-
 from .camera_tracker import CameraConfig, CameraTracker
 from .config import TrackingConfig
 from .fusion_engine import FusionEngine
@@ -74,6 +72,114 @@ MODE_COLORS = {
 RESET = "\033[0m"
 
 
+def _mode_to_quality_level(mode: TrackingMode) -> QualityLevel:
+    if mode == TrackingMode.VISIBLE:
+        return QualityLevel.GOOD
+    if mode in (TrackingMode.PARTIAL_OCCLUSION, TrackingMode.SINGLE_CAM_DEGRADED):
+        return QualityLevel.WARNING
+    if mode in (TrackingMode.FULL_OCCLUSION, TrackingMode.IMU_DISCONNECTED):
+        return QualityLevel.ERROR
+    return QualityLevel.OFFLINE
+
+
+def _snapshot_to_joint_dict(snapshot) -> dict:
+    """Convert a SkeletonSnapshot into the legacy tuple dict expected by
+    existing subsystem interfaces (recorder, vmc_sender, bvh, viewer).
+
+    Shape: ``{joint_name: (position_ndarray, rotation, confidence)}``.
+    """
+    return {
+        bone.name: (js.position.to_array(), js.rotation, float(js.confidence))
+        for bone, js in snapshot.joints.items()
+    }
+
+
+def _wire_event_subscribers(
+    bus,
+    *,
+    tray=None,
+    dashboard=None,
+    recorder=None,
+    vmc_sender=None,
+    bvh=None,
+    viewer=None,
+    discord=None,
+    api=None,
+    obs_overlay=None,
+    gesture=None,
+    notifier=None,
+) -> None:
+    """Subscribe each enabled subsystem to the events it cares about.
+
+    Kept as one function so the per-subsystem glue is easy to find and
+    the main loop stays thin. Subsystems that are ``None`` (disabled by
+    CLI flag) are skipped cleanly.
+    """
+    from .domain.events import (
+        FrameProcessed,
+        IMUDisconnected,
+        IMUReconnected,
+        TrackingModeChanged,
+    )
+
+    def on_frame(event: FrameProcessed) -> None:
+        snap = event.snapshot
+        fps = event.fps
+        mode_name = snap.mode.name
+        joint_positions = {bone.name: js.position.to_array() for bone, js in snap.joints.items()}
+        confs = [float(js.confidence) for js in snap.joints.values()]
+        avg_conf = sum(confs) / len(confs) if confs else 0.0
+
+        if gesture and joint_positions:
+            detected = gesture.update(joint_positions)
+            if detected:
+                logger.info("Gesture detected: %s", detected)
+        if tray:
+            tray.update(_mode_to_quality_level(snap.mode), mode_name, fps)
+        if dashboard:
+            joint_data = {b.name: {"conf": float(js.confidence)} for b, js in snap.joints.items()}
+            dashboard.update(mode_name, fps, avg_conf, joint_data)
+        if recorder and snap.joints:
+            recorder.record_frame(_snapshot_to_joint_dict(snap), mode_name)
+        if vmc_sender and snap.joints:
+            vmc_data = {b.name: (js.position.to_array(), js.rotation) for b, js in snap.joints.items()}
+            vmc_sender.send_frame(vmc_data)
+        if bvh and snap.joints:
+            bvh_data = {b.name: (js.position.to_array(), js.rotation) for b, js in snap.joints.items()}
+            bvh.add_frame(bvh_data)
+        if viewer and joint_positions:
+            viewer.update(joint_positions)
+        if discord:
+            discord.update(mode_name, fps)
+        if api:
+            joint_data = {b.name: {"conf": float(js.confidence)} for b, js in snap.joints.items()}
+            api.update(mode_name, fps, joint_data)
+        if obs_overlay:
+            obs_overlay.update(mode_name, fps, avg_conf)
+
+    bus.subscribe(FrameProcessed, on_frame)
+
+    if notifier is not None:
+        def on_mode_changed(event: TrackingModeChanged) -> None:
+            if event.current == TrackingMode.FULL_OCCLUSION:
+                notifier.notify_camera_lost(0)
+            elif (
+                event.current == TrackingMode.VISIBLE
+                and event.previous == TrackingMode.FULL_OCCLUSION
+            ):
+                notifier.notify_camera_recovered(0)
+
+        def on_imu_disconnected(_event: IMUDisconnected) -> None:
+            notifier.notify_disconnect()
+
+        def on_imu_reconnected(_event: IMUReconnected) -> None:
+            notifier.notify_reconnect()
+
+        bus.subscribe(TrackingModeChanged, on_mode_changed)
+        bus.subscribe(IMUDisconnected, on_imu_disconnected)
+        bus.subscribe(IMUReconnected, on_imu_reconnected)
+
+
 def _build_receiver(cfg: TrackingConfig):
     """Select and instantiate the IMU receiver based on config.
 
@@ -97,9 +203,32 @@ def _build_receiver(cfg: TrackingConfig):
             name_prefix=cfg.ble_device_name_prefix,
             scan_timeout_sec=cfg.ble_scan_timeout_sec,
         )
+    if cfg.receiver_type == "serial":
+        if not cfg.serial_port:
+            logger.error(
+                "receiver_type='serial' but serial_port is empty; falling back to OSC. "
+                "Set serial_port in config (e.g. 'COM3') or pass --port."
+            )
+            return OSCReceiver(host=cfg.osc_receive_host, port=cfg.osc_receive_port)
+        if not cfg.serial_tracker_id_to_bone:
+            logger.warning(
+                "receiver_type='serial' but serial_tracker_id_to_bone is empty; no trackers will be mapped."
+            )
+        try:
+            from .serial_receiver import SerialReceiver
+        except ImportError as exc:
+            logger.error(
+                "Cannot import SerialReceiver (pyserial missing?): %s. Falling back to OSC.", exc
+            )
+            return OSCReceiver(host=cfg.osc_receive_host, port=cfg.osc_receive_port)
+        return SerialReceiver(
+            port=cfg.serial_port,
+            baudrate=cfg.serial_baudrate,
+            tracker_id_to_bone=cfg.serial_tracker_id_to_bone,
+        )
     if cfg.receiver_type != "osc":
         logger.warning(
-            "Unknown receiver_type=%r; falling back to OSC. Valid values: 'osc', 'ble'.",
+            "Unknown receiver_type=%r; falling back to OSC. Valid values: 'osc', 'ble', 'serial'.",
             cfg.receiver_type,
         )
     # default: OSC via SlimeVR Server
@@ -112,15 +241,32 @@ def main() -> None:
     parser.add_argument("--cam1", type=int, help="Camera 1 index")
     parser.add_argument("--cam2", type=int, help="Camera 2 index")
     parser.add_argument(
+        "--cams",
+        type=str,
+        help="Comma-separated camera indices, e.g. '0,1' (stereo) or '0' (mono). "
+             "Overrides --cam1/--cam2 when set.",
+    )
+    parser.add_argument(
         "--receiver",
-        choices=["osc", "ble"],
-        help="IMU receiver: 'osc' (SlimeVR Server, default) or 'ble' (direct HaritoraX2, experimental)",
+        choices=["osc", "ble", "serial"],
+        help="IMU receiver: 'osc' (SlimeVR Server, default), 'ble' (direct HaritoraX2, experimental), "
+             "or 'serial' (GX6/GX2 dongle or SPP COM port, experimental)",
     )
     parser.add_argument("--osc-port", type=int, help="OSC receive port")
     parser.add_argument(
         "--ble-device",
         type=str,
         help="BLE advertising name prefix (default from config, e.g. 'HaritoraX2-')",
+    )
+    parser.add_argument(
+        "--port",
+        type=str,
+        help="Serial port for --receiver serial (e.g. COM3 on Windows, /dev/ttyUSB0 on Linux)",
+    )
+    parser.add_argument(
+        "--baud",
+        type=int,
+        help="Serial baud rate (default 500000 for GX6/GX2)",
     )
     parser.add_argument("--vrchat-port", type=int, help="VRChat send port")
     parser.add_argument("--no-camera", action="store_true", help="Run without cameras (OSC passthrough only)")
@@ -154,6 +300,16 @@ def main() -> None:
         cfg.cam1_index = args.cam1
     if args.cam2 is not None:
         cfg.cam2_index = args.cam2
+    if args.cams is not None:
+        try:
+            parsed_cams = [int(i.strip()) for i in args.cams.split(",") if i.strip()]
+        except ValueError:
+            logger.error("--cams must be comma-separated integers, got %r", args.cams)
+            sys.exit(2)
+        if not parsed_cams:
+            logger.error("--cams parsed to empty list (got %r) — specify at least one index", args.cams)
+            sys.exit(2)
+        cfg.cam_indices = parsed_cams
     if args.osc_port is not None:
         cfg.osc_receive_port = args.osc_port
     if args.vrchat_port is not None:
@@ -162,6 +318,10 @@ def main() -> None:
         cfg.receiver_type = args.receiver
     if args.ble_device is not None:
         cfg.ble_device_name_prefix = args.ble_device
+    if args.port is not None:
+        cfg.serial_port = args.port
+    if args.baud is not None:
+        cfg.serial_baudrate = args.baud
 
     # Preflight — fail fast with actionable Japanese messages before we
     # build subsystems and hit a deep traceback.
@@ -175,6 +335,7 @@ def main() -> None:
     camera_config = CameraConfig(
         cam1_index=cfg.cam1_index,
         cam2_index=cfg.cam2_index,
+        cam_indices=cfg.cam_indices or None,
         resolution=cfg.camera_resolution,
         target_fps=cfg.target_fps,
         calibration_file=cfg.calibration_file,
@@ -189,7 +350,11 @@ def main() -> None:
         port=cfg.osc_send_port,
     )
 
-    engine = FusionEngine(camera=camera, receiver=receiver, sender=sender, config=cfg)
+    from .application import EventBus
+    bus = EventBus()
+    engine = FusionEngine(
+        camera=camera, receiver=receiver, sender=sender, config=cfg, event_bus=bus,
+    )
 
     # Optional subsystems
     subs = SubsystemManager()
@@ -250,6 +415,21 @@ def main() -> None:
         from .bvh_exporter import BVHExporter
         bvh = BVHExporter()
 
+    _wire_event_subscribers(
+        bus=bus,
+        tray=tray,
+        dashboard=dashboard,
+        recorder=recorder,
+        vmc_sender=vmc_sender,
+        bvh=bvh,
+        viewer=viewer,
+        discord=discord,
+        api=api,
+        obs_overlay=obs_overlay,
+        gesture=gesture,
+        notifier=notifier,
+    )
+
     def shutdown(sig, frame):
         logger.info("Shutting down...")
         engine.stop()
@@ -268,7 +448,8 @@ def main() -> None:
     print("=" * 50)
     print("  OSC Tracking  - IMU x Dual WebCam Fusion")
     print("=" * 50)
-    print(f"  Cameras: {cfg.cam1_index}, {cfg.cam2_index} @ {cfg.camera_resolution}")
+    effective_cams = cfg.cam_indices if cfg.cam_indices else [cfg.cam1_index, cfg.cam2_index]
+    print(f"  Cameras: {effective_cams} @ {cfg.camera_resolution}")
     print(f"  OSC receive: {cfg.osc_receive_host}:{cfg.osc_receive_port}")
     print(f"  VRChat send: {cfg.osc_send_host}:{cfg.osc_send_port}")
     print(f"  Target FPS: {cfg.target_fps}")
@@ -304,7 +485,6 @@ def main() -> None:
     frame_duration = 1.0 / cfg.target_fps
     frame_count = 0
     last_status = time.monotonic()
-    prev_mode = TrackingMode.VISIBLE
 
     try:
         while True:
@@ -313,98 +493,21 @@ def main() -> None:
             if profiler:
                 profiler.begin_frame()
 
+            # One call does everything: fusion + aggregate update + event
+            # publish. All subsystems react through the event bus (wired
+            # up earlier via _wire_event_subscribers).
             if not args.no_camera:
                 mode = engine.update()
             else:
                 mode = TrackingMode.IMU_DISCONNECTED  # Camera-less mode
-
-            # Read camera data ONCE per frame (avoid repeated Lock + copy)
-            cj = camera.read_joints() if not args.no_camera else None
-            avg_conf = 0.0
-            if cj:
-                confs = [data[1] for data in cj.values()]
-                avg_conf = sum(confs) / len(confs) if confs else 0.0
-
-            fps_now = frame_count / max(time.monotonic() - last_status, 0.001)
-
-            # Helper: get rotation for a joint, fallback to identity
-            def _get_rot(name: str):
-                rot = receiver.get_bone_rotation(name)
-                return rot if rot is not None else Rotation.identity()
-
-            # Gesture detection
-            if gesture and cj:
-                joint_positions = {name: data[0] for name, data in cj.items()}
-                detected = gesture.update(joint_positions)
-                if detected:
-                    logger.info("Gesture detected: %s", detected)
-
-            # Tray icon
-            if tray:
-                if mode == TrackingMode.VISIBLE:
-                    level = QualityLevel.GOOD
-                elif mode in (TrackingMode.PARTIAL_OCCLUSION, TrackingMode.SINGLE_CAM_DEGRADED):
-                    level = QualityLevel.WARNING
-                elif mode in (TrackingMode.FULL_OCCLUSION, TrackingMode.IMU_DISCONNECTED):
-                    level = QualityLevel.ERROR
-                else:
-                    level = QualityLevel.OFFLINE
-                tray.update(level, mode.name, fps_now)
-
-            # Dashboard
-            if dashboard:
-                joint_data = {name: {"conf": data[1]} for name, data in cj.items()} if cj else {}
-                dashboard.update(mode.name, fps_now, avg_conf, joint_data)
-
-            # Recorder
-            if recorder and cj:
-                rec_data = {name: (data[0], _get_rot(name), data[1]) for name, data in cj.items()}
-                recorder.record_frame(rec_data, mode.name)
-
-            # VMC Protocol
-            if vmc_sender and cj:
-                vmc_data = {name: (data[0], _get_rot(name)) for name, data in cj.items()}
-                vmc_sender.send_frame(vmc_data)
-
-            # BVH recording
-            if bvh and cj:
-                bvh_data = {name: (data[0], _get_rot(name)) for name, data in cj.items()}
-                bvh.add_frame(bvh_data)
-
-            # Skeleton viewer
-            if viewer and cj:
-                viewer.update({name: data[0] for name, data in cj.items()})
-
-            # Discord presence
-            if discord:
-                discord.update(mode.name, fps_now)
-
-            # REST API
-            if api:
-                joint_data = {name: {"conf": data[1]} for name, data in cj.items()} if cj else {}
-                api.update(mode.name, fps_now, joint_data)
-
-            if obs_overlay:
-                obs_overlay.update(mode.name, fps_now, avg_conf)
-
-            # Notifications  - only on mode change
-            if mode != prev_mode:
-                if mode == TrackingMode.IMU_DISCONNECTED:
-                    notifier.notify_disconnect()
-                elif mode == TrackingMode.FULL_OCCLUSION:
-                    notifier.notify_camera_lost(0)
-                elif mode == TrackingMode.VISIBLE and prev_mode == TrackingMode.IMU_DISCONNECTED:
-                    notifier.notify_reconnect()
-                elif mode == TrackingMode.VISIBLE and prev_mode == TrackingMode.FULL_OCCLUSION:
-                    notifier.notify_camera_recovered(0)
-                prev_mode = mode
 
             if profiler:
                 profiler.end_frame()
 
             frame_count += 1
 
-            # Print status every 2 seconds
+            # Print status every 2 seconds — this is loop-level telemetry,
+            # not a subsystem, so it stays inline.
             if time.monotonic() - last_status > 2.0:
                 color = MODE_COLORS.get(mode, "")
                 fps = frame_count / (time.monotonic() - last_status)

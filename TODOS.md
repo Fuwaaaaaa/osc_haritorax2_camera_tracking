@@ -53,13 +53,16 @@
 - **Depends on:** HaritoraX2 実機の入手
 - **Context:** 検証内容: (1) 全 8 トラッカーの BLE local name を `ble_scan` で列挙、(2) `ble_local_name_to_bone` にマッピング、(3) `--receiver ble` 起動、(4) VRChat 等で実際に姿勢追従、(5) 30 分程度の長時間安定性（切断リトライ確認）
 
-### Serial (COM/SPP) 経路
-- **What:** BLE に加えて GX6/GX2 USB ドングルおよび Bluetooth Classic (SPP) COM ポート経由の接続経路を追加
-- **Why:** BLE が使えない環境や、BLE より低遅延が期待できる有線接続を提供
+### ~~Serial (COM/SPP) 経路~~ ✅ 完了 (experimental)
+- **解決:** `src/osc_tracking/serial_receiver.py` 実装済み。`--receiver serial --port COM3` で有効化。pyserial 経由で GX6/GX2 dongle / Bluetooth Classic SPP からフレーム (sync `0xAA 0x55` + tracker_id + int16×4 quaternion) を読み取り、`ble_receiver.decode_rotation` を共有して回転を復元。`docs/serial-direct-guide.md` にセットアップ手順あり。実機動作検証は別 TODO (下記「Serial 実機動作検証」)。
+
+### Serial 実機動作検証
+- **What:** GX6/GX2 dongle 実機で `--receiver serial` の動作確認、フレーム形式・遅延・切断復旧の検証
+- **Why:** Serial 経路は haritorax-interpreter 公開実装を参考にしたが未検証。実機確認で `docs/serial-direct-guide.md` を ✅ に昇格
 - **Effort:** M（CC: 1時間）
 - **Priority:** P3
-- **Depends on:** BLE 実機動作検証完了
-- **Context:** pyserial を依存に追加し `SerialReceiver` クラスを `ble_receiver.py` と同じ `IMUReceiver` protocol で実装。haritorax-interpreter の `src/mode/com.ts` を参照
+- **Depends on:** GX6/GX2 dongle の入手
+- **Context:** 検証内容: (1) COM ポート認識、(2) `--receiver serial --port COMx` 起動、(3) `serial_tracker_id_to_bone` のマッピング、(4) 実際に姿勢追従、(5) 30 分程度の長時間安定性。フレーム形式が合わない場合は `src/osc_tracking/serial_receiver.py` の `parse_frames` / `SYNC_BYTES` を haritorax-interpreter `src/mode/com.ts` 実測値に合わせて調整
 
 ### ~~GitHub Issueテンプレート（デバイス互換性レポート）~~ ✅ 完了
 - **解決:** `.github/ISSUE_TEMPLATE/device-compat.yml` を作成。接続経路 (OSC / BLE / other) の dropdown、デバイス / トラッカー数 / OS / ファームウェア / osc-tracking バージョン / SlimeVR Server バージョン / 結果 (動作 / 部分 / 失敗) / 動いた箇所 / 詰まった箇所 / ログ、を必須・任意項目としてフォーム化。`config.yml` で contact link も追加。docs/other-trackers.md と docs/ble-direct-guide.md の誘導リンクを新 URL (`?template=device-compat.yml`) に更新。
@@ -80,19 +83,27 @@
 - **Priority:** P3
 - **Depends on:** リブランド完了後、SlimeVR 実機動作検証
 
-### N台カメラ対応
-- **What:** 2台以上のカメラをサポート
-- **Why:** 12ヶ月理想状態の一部。カバレッジ向上
-- **Effort:** M（CC: 1時間）
-- **Priority:** P3
-- **Depends on:** Phase 3完了
+### ~~N台カメラ対応（設定 API のみ）~~ ✅ 完了（scaffold）
+- **解決:** `CameraConfig.cam_indices: list[int]` + `effective_cam_indices` / `camera_count` プロパティ、`--cams 0,1` CLI フラグ、`config.cam_indices` 設定項目を追加。1台 (mono) / 2台 (stereo) に対応。3台以上は warn + 先頭2台のみ使用。legacy `cam1_index` / `cam2_index` は back-compat で維持。実際のマルチビュー三角測量 (3+ カメラの bundle adjustment) は別 TODO (下記「真のマルチビュー三角測量」)。
 
-### 深層学習ベースポーズ予測
-- **What:** 部分遮蔽時に過去の動きから次フレームを予測
-- **Why:** 12ヶ月理想状態の一部。遮蔽時の品質向上
-- **Effort:** L（CC: 3時間）
+### 真のマルチビュー三角測量（3+ カメラ）
+- **What:** 3台以上のカメラからの bundle adjustment による三角測量 (現在は先頭2台のみ使用)
+- **Why:** Phase 3 の 12ヶ月理想状態。遮蔽時のカバレッジ向上
+- **Effort:** L（CC: 3時間+）
 - **Priority:** P3
-- **Depends on:** Phase 4完了
+- **Depends on:** `CameraConfig.cam_indices` scaffold 完了 (済)
+- **Context:** `_camera_worker` を N-way に拡張、`stereo_calibration` を multi-view 化 (OpenCV `recoverPose` / SfM)、SHM layout を N-cam 信頼度に generalize
+
+### ~~速度ベースポーズ予測~~ ✅ 完了
+- **解決:** `src/osc_tracking/pose_predictor.py` に `PosePredictor` Protocol + `VelocityPredictor` 実装。ローリング履歴からジョイント毎に線形速度を推定し、`FULL_OCCLUSION` / `PARTIAL_OCCLUSION` 時に `FusionEngine` が camera_pos 欠損箇所に予測値を注入。`stale_window_seconds` で長時間遮蔽後のワープを防止、`max_predict_seconds` で absurd extrapolation をクランプ。14 tests + fusion integration 3 tests.
+
+### 深層学習ベースポーズ予測（将来の drop-in 置換）
+- **What:** 小型 LSTM / Transformer による pose prediction で `VelocityPredictor` を置換
+- **Why:** 12ヶ月理想状態の一部。長時間遮蔽時の精度向上（速度ベースは 500ms 程度までが有効）
+- **Effort:** L（CC: 3時間+、訓練 dataset 収集が別途必要）
+- **Priority:** P3
+- **Depends on:** 速度ベース (済) → 録画データ収集 → モデル訓練 → Protocol 適合実装
+- **Context:** `pose_predictor.PosePredictor` Protocol を実装すれば `FusionEngine.predictor` をそのまま差し替え可能。学習には `recorder.py` の JSONL セッションログが活用できる
 
 ### ~~main.pyリファクタ（SubsystemManager）~~ ✅ 完了
 - **解決:** `src/osc_tracking/main.py:33-63` に `SubsystemManager` クラス抽出済み。`add` / `get` / `start_all` / `stop_all` で各サブシステム (tray / dashboard / viewer / discord / api / obs / vmc / recorder / profiler / bvh / gesture) のライフサイクルを統一。CHANGELOG v0.2.2 に既に記載あり。TODOS.md の stale entry を掃除 (/plan-eng-review See-Something-Say-Something 指摘より)。

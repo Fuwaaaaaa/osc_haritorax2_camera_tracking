@@ -359,3 +359,54 @@ class TestTornRead:
         if JOINT_NAMES[0] in result:
             pos, _, _, _ = result[JOINT_NAMES[0]]
             assert pos[0] == pytest.approx(1.0)
+
+
+class TestCamIndicesList:
+    """N-camera config: cam_indices list replaces per-index fields.
+
+    Back-compat: when cam_indices is omitted, it must derive from the
+    legacy cam1_index / cam2_index fields. Forward: an explicit list is
+    the preferred API, tolerant of 1 (mono) or 2+ (stereo) cameras.
+    """
+
+    def test_defaults_list_derived_from_legacy_fields(self):
+        cfg = CameraConfig()
+        assert cfg.cam_indices == [0, 1]
+
+    def test_explicit_cam_indices_overrides_legacy_fields(self):
+        cfg = CameraConfig(cam_indices=[3, 4])
+        assert cfg.cam_indices == [3, 4]
+
+    def test_mono_mode_single_camera(self):
+        """A list of length 1 means monocular — valid, uses MediaPipe depth."""
+        cfg = CameraConfig(cam_indices=[2])
+        assert cfg.cam_indices == [2]
+        assert cfg.camera_count == 1
+
+    def test_stereo_two_cameras(self):
+        cfg = CameraConfig(cam_indices=[0, 1])
+        assert cfg.camera_count == 2
+
+    def test_three_or_more_cameras_warn_and_clip(self, caplog):
+        """3+ cameras currently fall back to using the first 2. True
+        multi-view triangulation is a future feature (tracked in TODOS)."""
+        caplog.set_level("WARNING", logger="osc_tracking.camera_tracker")
+        cfg = CameraConfig(cam_indices=[0, 1, 2, 3])
+        assert any(
+            "multi-view" in r.message.lower() or "more than" in r.message.lower()
+            for r in caplog.records
+        )
+        # Effective indices still expose the full list, but camera_count
+        # reports what will actually be opened.
+        assert cfg.effective_cam_indices == [0, 1]
+        assert cfg.camera_count == 2
+
+    def test_zero_cameras_raises(self):
+        with pytest.raises(ValueError):
+            CameraConfig(cam_indices=[])
+
+    def test_backcompat_legacy_fields_still_work(self):
+        """Code that instantiates with cam1_index / cam2_index keeps working."""
+        cfg = CameraConfig(cam1_index=5, cam2_index=6)
+        assert cfg.cam_indices == [5, 6]
+        assert cfg.effective_cam_indices == [5, 6]

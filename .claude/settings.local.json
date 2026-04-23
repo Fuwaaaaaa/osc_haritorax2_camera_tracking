@@ -44,7 +44,16 @@
       "Bash(pip show:*)",
       "Bash(dist/osc_tracking/osc_tracking.exe --help)",
       "Bash(dist/osc_tools/osc_tools.exe:*)",
-      "Bash(dist/osc_tracking/osc_tools.exe --help)"
+      "Bash(dist/osc_tracking/osc_tools.exe --help)",
+      "Bash(git filter-branch --force --env-filter ' *)",
+      "Bash(git stash *)",
+      "Bash(git config *)",
+      "Bash(git ls-remote *)",
+      "Bash(awk '{print $2}')",
+      "Bash(git ls-tree *)",
+      "Bash(xargs -I{} git log -1 --oneline {})",
+      "Bash(gh api *)",
+      "Bash(git *)"
     ]
   }
 }

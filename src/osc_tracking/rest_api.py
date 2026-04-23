@@ -34,26 +34,52 @@ class APIHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"error":"not found"}')
 
     def do_POST(self):
+        # Drain the request body regardless of what we do with it — on
+        # Windows, responding before reading causes the client to see
+        # a connection abort rather than the HTTP status.
+        length = int(self.headers.get("Content-Length", 0))
+        if length > 0:
+            try:
+                self.rfile.read(length)
+            except Exception:
+                pass
+
+        # Reject cross-origin mutating requests. ``http.server`` does not
+        # enforce Origin checks, so a browser tab on any other site could
+        # otherwise CSRF the local API. Any browser issuing a cross-origin
+        # POST will set Origin; same-origin tools (curl, scripts) typically
+        # do not, and those are what legitimate callers look like.
+        origin = self.headers.get("Origin", "")
+        if origin and origin not in (
+            f"http://localhost:{self.server.server_address[1]}",
+            f"http://127.0.0.1:{self.server.server_address[1]}",
+        ):
+            self.send_response(403)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error":"forbidden origin"}')
+            return
+
         if self.path == "/api/reset":
             with _lock:
                 _state["reset_requested"] = True
-            self._json_response({"ok": True})
-        elif self.path == "/api/config":
-            length = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(length)) if length > 0 else {}
-            if _config_ref:
-                for key, value in body.items():
-                    if hasattr(_config_ref, key):
-                        setattr(_config_ref, key, value)
-            self._json_response({"ok": True})
+            self._json_response({"ok": True}, allow_cors=False)
         else:
+            # /api/config POST was removed: it allowed any local browser
+            # tab to rewrite arbitrary TrackingConfig fields (e.g. redirect
+            # osc_send_host). Runtime config changes should go through the
+            # in-app setup wizard or a config file reload, not HTTP.
             self.send_response(404)
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
+            self.wfile.write(b'{"error":"not found"}')
 
-    def _json_response(self, data: dict) -> None:
+    def _json_response(self, data: dict, *, allow_cors: bool = True) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        if allow_cors:
+            # Read-only endpoints keep CORS open for dashboards.
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps(data, default=str).encode())
 

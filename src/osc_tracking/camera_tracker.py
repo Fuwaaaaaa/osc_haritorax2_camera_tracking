@@ -97,14 +97,52 @@ def _unique_shm_name() -> str:
 
 @dataclass
 class CameraConfig:
-    """Configuration for the dual camera setup."""
+    """Configuration for the camera setup.
+
+    Legacy fields ``cam1_index`` / ``cam2_index`` remain for backward
+    compatibility. New code should set ``cam_indices`` directly, which
+    accepts 1 (monocular) or 2 (stereo) cameras. A list of 3+ is
+    currently clipped to the first two — true multi-view triangulation
+    is tracked as a future TODO.
+    """
     cam1_index: int = 0
     cam2_index: int = 1
+    cam_indices: list[int] | None = None
     resolution: tuple[int, int] = (640, 480)
     target_fps: int = 30
     calibration_file: str = "calibration_data/stereo_calib.npz"
     model_path: str = MODEL_PATH_DEFAULT
     model_path_lite: str = MODEL_PATH_LITE
+
+    def __post_init__(self) -> None:
+        if self.cam_indices is None:
+            self.cam_indices = [self.cam1_index, self.cam2_index]
+        if not self.cam_indices:
+            raise ValueError("cam_indices must contain at least one camera index")
+        if len(self.cam_indices) > 2:
+            logger.warning(
+                "cam_indices has %d cameras; multi-view triangulation is not "
+                "yet implemented. Using the first 2 (%s) and ignoring the rest.",
+                len(self.cam_indices),
+                self.cam_indices[:2],
+            )
+        # Keep legacy fields consistent so the worker (which still uses
+        # cam1_index / cam2_index) picks up explicit cam_indices lists.
+        self.cam1_index = self.cam_indices[0]
+        # Mono mode: reuse cam1 for cam2 so triangulation stays valid on
+        # the degenerate case; the calib-absent branch will still fall
+        # back to MediaPipe z-depth.
+        self.cam2_index = self.cam_indices[1] if len(self.cam_indices) >= 2 else self.cam_indices[0]
+
+    @property
+    def effective_cam_indices(self) -> list[int]:
+        """The cameras actually opened by the worker (at most 2 today)."""
+        assert self.cam_indices is not None  # set in __post_init__
+        return self.cam_indices[:2]
+
+    @property
+    def camera_count(self) -> int:
+        return len(self.effective_cam_indices)
 
 
 class CameraTracker:
