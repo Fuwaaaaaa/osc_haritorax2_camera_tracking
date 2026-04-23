@@ -143,7 +143,7 @@ class SerialReceiver(BaseIMUReceiver):
     ) -> None:
         super().__init__(freshness_window_sec=FRESHNESS_WINDOW_SEC)
         mapping = dict(tracker_id_to_bone or {})
-        self._warn_on_unknown_bones(mapping)
+        self.warn_on_unknown_bones(mapping.values(), "Serial")
         self.port = port
         self.baudrate = int(baudrate)
         self.tracker_id_to_bone: dict[int, str] = mapping
@@ -153,21 +153,6 @@ class SerialReceiver(BaseIMUReceiver):
             bone: BoneData() for bone in self.tracker_id_to_bone.values()
         }
         self._serial = None
-
-    @staticmethod
-    def _warn_on_unknown_bones(mapping: dict[int, str]) -> None:
-        """Warn when config maps to bone names FusionEngine will not read."""
-        from .complementary_filter import JOINT_NAMES
-        known = set(JOINT_NAMES)
-        unknown = sorted({bone for bone in mapping.values() if bone not in known})
-        if unknown:
-            logger.warning(
-                "Serial bone mapping contains unknown bone name(s) %s; "
-                "these tracker ids will receive data but FusionEngine "
-                "will never read them. Valid names: %s",
-                unknown,
-                sorted(known),
-            )
 
     # ------------------------------------------------------------------
     # BaseIMUReceiver hooks

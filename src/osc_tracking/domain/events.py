@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from osc_tracking.domain.modes import TrackingMode
 from osc_tracking.domain.skeleton import SkeletonSnapshot
 from osc_tracking.domain.values import BoneId
-from osc_tracking.state_machine import TrackingMode
 
 
 @dataclass(frozen=True, slots=True)

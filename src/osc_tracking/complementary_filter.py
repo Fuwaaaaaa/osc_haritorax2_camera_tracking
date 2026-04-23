@@ -20,6 +20,13 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+# Canonical bone list lives in the domain layer now. Re-exported here
+# for back-compat — many call sites still do
+# ``from .complementary_filter import JOINT_NAMES``.
+from osc_tracking.domain.bones import JOINT_NAMES
+
+__all__ = ["JOINT_NAMES", "JointState", "ComplementaryFilter"]
+
 
 @dataclass
 class JointState:
@@ -36,16 +43,7 @@ class JointState:
     initialized: bool = False
 
 
-# Tracked joints — matches the typical 8-tracker IMU layout (e.g. HaritoraX2).
-# IMU side provides: Hips, Chest, LeftFoot, RightFoot,
-#                     LeftKnee, RightKnee, LeftElbow, RightElbow
-# Camera provides: Head (via MediaPipe face landmarks)
-JOINT_NAMES = [
-    "Hips", "Chest", "Head",
-    "LeftFoot", "RightFoot",
-    "LeftKnee", "RightKnee",
-    "LeftElbow", "RightElbow",
-]
+# JOINT_NAMES is re-exported from domain.bones (see import at top of file).
 
 
 class ComplementaryFilter:

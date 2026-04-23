@@ -11,11 +11,13 @@ Public surface re-exported from submodules so callers can write
 the module path.
 """
 
+from osc_tracking.domain.bones import JOINT_NAMES
 from osc_tracking.domain.modes import TrackingMode
 from osc_tracking.domain.skeleton import JointSnapshot, Skeleton, SkeletonSnapshot
 from osc_tracking.domain.values import BoneId, Confidence, Position3D
 
 __all__ = [
+    "JOINT_NAMES",
     "BoneId",
     "Confidence",
     "JointSnapshot",

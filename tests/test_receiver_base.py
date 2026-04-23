@@ -176,3 +176,29 @@ class TestProtocolCompliance:
     def test_dummy_satisfies_imu_receiver_protocol(self) -> None:
         r = DummyReceiver()
         assert isinstance(r, IMUReceiver)
+
+
+class TestWarnOnUnknownBones:
+    """The shared helper that both BLE and Serial receivers use."""
+
+    def test_silent_when_every_name_is_canonical(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger="osc_tracking.receiver_base"):
+            BaseIMUReceiver.warn_on_unknown_bones(["Hips", "Chest"], "Test")
+        assert caplog.records == []
+
+    def test_warns_listing_the_bad_names_and_transport(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger="osc_tracking.receiver_base"):
+            BaseIMUReceiver.warn_on_unknown_bones(["Hips", "leftfeet"], "BLE")
+        assert any(
+            "BLE" in rec.message and "leftfeet" in rec.message
+            for rec in caplog.records
+        )
+
+    def test_empty_input_is_silent(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger="osc_tracking.receiver_base"):
+            BaseIMUReceiver.warn_on_unknown_bones([], "Serial")
+        assert caplog.records == []
