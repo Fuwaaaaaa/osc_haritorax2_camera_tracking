@@ -102,7 +102,14 @@ class OSCReceiver(BaseIMUReceiver):
                 raise
 
     def _run_loop(self) -> None:
-        assert self._server is not None
+        # Use an explicit raise rather than ``assert`` so the guard
+        # survives ``python -O`` (which strips asserts) and so the
+        # error message is self-describing if the BaseIMUReceiver
+        # contract is ever broken in a future refactor.
+        if self._server is None:
+            raise RuntimeError(
+                "OSCReceiver._run_loop called before _prepare_start succeeded"
+            )
         self._server.serve_forever()
 
     def _on_stop_requested(self) -> None:

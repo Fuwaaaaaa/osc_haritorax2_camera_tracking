@@ -81,9 +81,11 @@ def calibrate_stereo(
 
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
+    last_gray: np.ndarray | None = None
     for i, (img1, img2) in enumerate(image_pairs):
         gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY) if len(img1.shape) == 3 else img1
         gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY) if len(img2.shape) == 3 else img2
+        last_gray = gray1
 
         ret1, corners1 = cv2.findChessboardCorners(gray1, board_size, None)
         ret2, corners2 = cv2.findChessboardCorners(gray2, board_size, None)
@@ -102,7 +104,12 @@ def calibrate_stereo(
         logger.error("Only %d valid pairs found, need at least 5", len(obj_points))
         return None
 
-    h, w = gray1.shape[:2]
+    # last_gray is guaranteed set here because len(obj_points) >= 5 implies
+    # at least 5 iterations of the loop ran — making it explicit keeps
+    # mypy happy and removes the hidden dependency between the early
+    # return and the loop variable still being in scope.
+    assert last_gray is not None
+    h, w = last_gray.shape[:2]
     image_size = (w, h)
 
     # Per-camera calibration
@@ -169,8 +176,11 @@ def load_calibration(path: str | Path) -> StereoCalibration | None:
             image_size=tuple(data["image_size"]),
             reprojection_error=float(data["reprojection_error"]),
         )
-    except Exception:
-        logger.warning("Failed to load calibration from %s", path)
+    except (OSError, KeyError, ValueError):
+        # OSError → file corrupt / unreadable; KeyError → missing array;
+        # ValueError → bad shape or float conversion. exc_info=True so the
+        # traceback survives to a debug log instead of being swallowed.
+        logger.warning("Failed to load calibration from %s", path, exc_info=True)
         return None
 
 
@@ -595,6 +605,8 @@ def load_multiview_calibration(path: str | Path) -> MultiViewCalibration | None:
             image_size=tuple(data["image_size"]),
             reprojection_error=float(data["reprojection_error"]),
         )
-    except Exception:
-        logger.warning("Failed to load multi-view calibration from %s", path)
+    except (OSError, KeyError, ValueError):
+        logger.warning(
+            "Failed to load multi-view calibration from %s", path, exc_info=True
+        )
         return None

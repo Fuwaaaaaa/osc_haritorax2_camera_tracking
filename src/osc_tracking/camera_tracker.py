@@ -23,6 +23,7 @@ Architecture (2-process model):
     └─────────────────────────────────┘
 """
 
+import itertools
 import logging
 import multiprocessing as mp
 import time
@@ -78,7 +79,11 @@ def _next_monotonic_ms(prev_ms: int) -> int:
     return now_ms
 
 
-_shm_name_counter = 0
+# Thread-safe counter so back-to-back SHM allocations (e.g. across tests
+# that instantiate multiple CameraTrackers) never collide on the same
+# name. ``itertools.count`` is implemented in C and its ``__next__`` call
+# is atomic under the GIL — no external lock needed.
+_shm_name_counter = itertools.count(1)
 
 
 def _zero_joint(buf: np.ndarray, i: int, now: float) -> None:
@@ -104,11 +109,9 @@ def _unique_shm_name() -> str:
     re-bound to stale buffers after a hard exit; a process-local counter
     ensures back-to-back calls also differ (``time.monotonic_ns`` resolution
     is low enough on Windows that consecutive calls can tie)."""
-    global _shm_name_counter
-    _shm_name_counter += 1
     return (
         f"{SHM_NAME}_{mp.current_process().pid}"
-        f"_{time.monotonic_ns()}_{_shm_name_counter}"
+        f"_{time.monotonic_ns()}_{next(_shm_name_counter)}"
     )
 
 

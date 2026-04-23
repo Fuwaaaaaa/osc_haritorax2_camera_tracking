@@ -10,8 +10,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from osc_tracking.stereo_calibration import StereoCalibration
 
 
 class FileCalibrationRepository:
@@ -38,7 +42,7 @@ class FileCalibrationRepository:
             resolved = cwd / "_rejected_calibration_path.npz"
         self._path = resolved
 
-    def load(self):
+    def load(self) -> StereoCalibration | None:
         # Lazy import so that test contexts not using calibration don't
         # pay the cv2 / numpy import cost through this module.
         from osc_tracking.stereo_calibration import load_calibration
