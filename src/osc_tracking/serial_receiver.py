@@ -31,20 +31,20 @@ Threading
 A dedicated daemon thread owns the serial port. It accumulates bytes,
 hands them to :func:`parse_frames`, and dispatches each decoded frame
 to :meth:`_handle_frame`. Reads on the main thread go through
-:meth:`get_bone_rotation`, guarded by a 1-second freshness window —
-the same contract as ``OSCReceiver`` and ``BLEReceiver``.
+``get_bone_rotation`` (inherited from BaseIMUReceiver), guarded by a
+1-second freshness window — the same contract as ``OSCReceiver`` and
+``BLEReceiver``.
 """
 
 from __future__ import annotations
 
 import logging
-import threading
 import time
-from dataclasses import dataclass, field
 
 from scipy.spatial.transform import Rotation
 
 from .ble_receiver import decode_rotation
+from .receiver_base import BaseIMUReceiver, BoneData
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +67,18 @@ MAX_BUFFER_BYTES = 4096
 # GX6/GX2 dongle default baud rate per haritorax-interpreter.
 DEFAULT_BAUDRATE = 500000
 
-
-@dataclass
-class BoneData:
-    """Rotation data for a single tracked bone."""
-
-    rotation: Rotation = field(default_factory=Rotation.identity)
-    timestamp: float = 0.0
+# Re-exported so existing callers keep working after the base-class migration.
+__all__ = [
+    "BoneData",
+    "DEFAULT_BAUDRATE",
+    "FRESHNESS_WINDOW_SEC",
+    "FRAME_LENGTH",
+    "MAX_BUFFER_BYTES",
+    "RECONNECT_DELAY_SEC",
+    "SYNC_BYTES",
+    "SerialReceiver",
+    "parse_frames",
+]
 
 
 def parse_frames(buffer: bytes) -> tuple[list[tuple[int, bytes]], bytes]:
@@ -116,7 +121,7 @@ def _open_serial(port: str, baudrate: int):
     return serial.Serial(port=port, baudrate=baudrate, timeout=0.1)
 
 
-class SerialReceiver:
+class SerialReceiver(BaseIMUReceiver):
     """Receives IMU rotation data from a HaritoraX dongle over a COM port.
 
     Parameters
@@ -138,6 +143,7 @@ class SerialReceiver:
         baudrate: int = DEFAULT_BAUDRATE,
         reconnect_delay_sec: float = RECONNECT_DELAY_SEC,
     ) -> None:
+        super().__init__(freshness_window_sec=FRESHNESS_WINDOW_SEC)
         mapping = dict(tracker_id_to_bone or {})
         self._warn_on_unknown_bones(mapping)
         self.port = port
@@ -145,12 +151,9 @@ class SerialReceiver:
         self.tracker_id_to_bone: dict[int, str] = mapping
         self.reconnect_delay_sec = float(reconnect_delay_sec)
 
-        self.bones: dict[str, BoneData] = {
+        self.bones = {
             bone: BoneData() for bone in self.tracker_id_to_bone.values()
         }
-        self._last_receive_time: float = 0.0
-        self._running: bool = False
-        self._thread: threading.Thread | None = None
         self._serial = None
 
     @staticmethod
@@ -169,31 +172,13 @@ class SerialReceiver:
             )
 
     # ------------------------------------------------------------------
-    # IMUReceiver protocol surface
+    # BaseIMUReceiver hooks
     # ------------------------------------------------------------------
-    @property
-    def is_connected(self) -> bool:
-        if self._last_receive_time == 0.0:
-            return False
-        return (time.monotonic() - self._last_receive_time) < FRESHNESS_WINDOW_SEC
-
-    @property
-    def seconds_since_last_receive(self) -> float:
-        if self._last_receive_time == 0.0:
-            return float("inf")
-        return time.monotonic() - self._last_receive_time
+    def _thread_name(self) -> str:
+        return "serial-receiver"
 
     def start(self) -> None:
-        """Spawn the background reader thread. Idempotent."""
-        if self._running:
-            return
-        self._running = True
-        self._thread = threading.Thread(
-            target=self._run_read_loop,
-            daemon=True,
-            name="serial-receiver",
-        )
-        self._thread.start()
+        super().start()
         logger.info(
             "SerialReceiver started (port=%s, baud=%d, %d tracker mappings)",
             self.port,
@@ -202,10 +187,17 @@ class SerialReceiver:
         )
 
     def stop(self) -> None:
-        """Signal shutdown and join the background thread."""
-        self._running = False
-        # Detach the serial handle before closing so the reader thread's
-        # finally block can't race us to a double-close on the same object.
+        super().stop()
+        logger.info("SerialReceiver stopped")
+
+    def _on_stop_requested(self) -> None:
+        """Close the serial handle so the blocking read wakes up.
+
+        Detaches ``self._serial`` *before* closing it: the reader
+        thread's finally-block rechecks ownership and skips the close
+        when None, which is how we prevent a double-close race between
+        stop() and the reader's own cleanup (regression from PR #11).
+        """
         ser = self._serial
         self._serial = None
         if ser is not None:
@@ -213,26 +205,8 @@ class SerialReceiver:
                 ser.close()
             except Exception:  # pragma: no cover - defensive
                 pass
-        thread = self._thread
-        if thread is not None:
-            thread.join(timeout=2.0)
-            if thread.is_alive():
-                logger.warning("SerialReceiver thread did not exit within 2s")
-        self._thread = None
-        logger.info("SerialReceiver stopped")
 
-    def get_bone_rotation(self, bone_name: str) -> Rotation | None:
-        bone = self.bones.get(bone_name)
-        if bone is None or bone.timestamp == 0.0:
-            return None
-        if (time.monotonic() - bone.timestamp) > FRESHNESS_WINDOW_SEC:
-            return None
-        return bone.rotation
-
-    # ------------------------------------------------------------------
-    # Background thread
-    # ------------------------------------------------------------------
-    def _run_read_loop(self) -> None:
+    def _run_loop(self) -> None:
         try:
             import serial  # noqa: F401  # type: ignore[import-not-found]
         except ImportError as exc:
