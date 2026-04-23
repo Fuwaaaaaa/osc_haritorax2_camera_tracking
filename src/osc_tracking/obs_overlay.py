@@ -114,8 +114,14 @@ class OBSOverlay:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        vis_th = self.visible_threshold
-        par_th = self.partial_threshold
+        # Clamp into the valid range and JSON-encode. ``str(float)``
+        # would let a config-supplied NaN/inf leak into the inline
+        # JavaScript; json.dumps emits literal ``NaN`` / ``Infinity``
+        # which the JS runtime at least rejects coherently, and the
+        # clamp makes that unreachable anyway.
+        import json as _json
+        vis_th = _json.dumps(max(0.0, min(1.0, float(self.visible_threshold))))
+        par_th = _json.dumps(max(0.0, min(1.0, float(self.partial_threshold))))
 
         class ConfiguredOverlayHandler(OverlayHandler):
             def do_GET(self):
@@ -125,9 +131,9 @@ class OBSOverlay:
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
                     html = OVERLAY_HTML.replace(
-                        "{visible_threshold}", str(vis_th)
+                        "{visible_threshold}", vis_th
                     ).replace(
-                        "{partial_threshold}", str(par_th)
+                        "{partial_threshold}", par_th
                     )
                     self.wfile.write(html.encode())
                 else:

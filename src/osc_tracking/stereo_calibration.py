@@ -150,12 +150,17 @@ def save_calibration(calib: StereoCalibration, path: str | Path) -> None:
 
 
 def load_calibration(path: str | Path) -> StereoCalibration | None:
-    """Load calibration from .npz file."""
+    """Load calibration from .npz file.
+
+    ``allow_pickle=False`` is explicit here (the NumPy default since
+    1.16.3) so a future regression to a ``.npy`` object-array cannot
+    silently enable pickle deserialisation from a config-supplied path.
+    """
     path = Path(path)
     if not path.exists():
         return None
     try:
-        data = np.load(path)
+        data = np.load(path, allow_pickle=False)
         return StereoCalibration(
             K1=data["K1"], D1=data["D1"],
             K2=data["K2"], D2=data["D2"],

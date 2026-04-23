@@ -102,20 +102,32 @@ es.onmessage=e=>{
   if(st.querySelector('::before'))st.querySelector('::before').style.background=st.style.color;
   const jc=document.getElementById('joints');
   if(d.joints){
-    jc.innerHTML='';
+    jc.replaceChildren();
     for(const[name,j]of Object.entries(d.joints)){
       const c=j.conf>vt?'var(--green)':j.conf>pt?'var(--yellow)':'var(--red)';
       const cc=j.conf>vt?'green':j.conf>pt?'yellow':'red';
       const lbl=j.conf>vt?'GOOD':j.conf>pt?'WARN':'LOW';
-      jc.innerHTML+=`<div class="joint"><span class="joint-name">${name}</span>`+
-        `<div class="bar"><div class="bar-fill" style="width:${j.conf*100}%;background:${c}"></div></div>`+
-        `<span class="joint-conf ${cc}">${(j.conf*100).toFixed(0)}% ${lbl}</span></div>`;
+      // Build via DOM API so joint 'name' (which may originate from
+      // a BLE/serial device advertising an attacker-chosen string if
+      // that path is ever wired in) cannot inject HTML/JS.
+      const row=document.createElement('div');row.className='joint';
+      const ns=document.createElement('span');ns.className='joint-name';ns.textContent=name;
+      const bar=document.createElement('div');bar.className='bar';
+      const fill=document.createElement('div');fill.className='bar-fill';
+      fill.style.width=(j.conf*100)+'%';fill.style.background=c;
+      bar.appendChild(fill);
+      const cs=document.createElement('span');cs.className='joint-conf '+cc;
+      cs.textContent=(j.conf*100).toFixed(0)+'% '+lbl;
+      row.append(ns,bar,cs);jc.appendChild(row);
     }
   }
   const log=document.getElementById('log');
   const ts=new Date().toLocaleTimeString('ja-JP',{hour12:false});
-  log.innerHTML+=`<div>${ts} <span class="log-mode">${d.mode}</span> `+
-    `conf=<span class="log-val">${((d.avg_conf||0)*100).toFixed(0)}%</span></div>`;
+  const line=document.createElement('div');
+  const mode=document.createElement('span');mode.className='log-mode';mode.textContent=d.mode;
+  const val=document.createElement('span');val.className='log-val';val.textContent=((d.avg_conf||0)*100).toFixed(0)+'%';
+  line.append(ts+' ',mode,' conf=',val);
+  log.appendChild(line);
   log.scrollTop=log.scrollHeight;
 };
 </script></body></html>"""

@@ -38,7 +38,15 @@ class TrackingRecorder:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         if filename is None:
             filename = f"recording_{time.strftime('%Y%m%d_%H%M%S')}.jsonl"
-        self._path = self.output_dir / filename
+        # Strip any directory components so a caller-supplied filename
+        # can never escape ``output_dir`` (e.g. ``../../autostart.py``).
+        safe_name = Path(filename).name
+        if not safe_name or safe_name != filename:
+            logger.warning(
+                "Recorder filename %r contained path components; "
+                "using sanitized name %r.", filename, safe_name,
+            )
+        self._path = self.output_dir / safe_name
         self._file = open(self._path, "w", encoding="utf-8")
         self._start_time = time.monotonic()
         self._frame_count = 0
