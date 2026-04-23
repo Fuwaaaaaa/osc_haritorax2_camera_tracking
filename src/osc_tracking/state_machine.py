@@ -29,16 +29,10 @@ State Machine Diagram:
 
 import time
 from dataclasses import dataclass
-from enum import Enum, auto
 
+from osc_tracking.domain.modes import TrackingMode
 
-class TrackingMode(Enum):
-    VISIBLE = auto()
-    PARTIAL_OCCLUSION = auto()
-    FULL_OCCLUSION = auto()
-    IMU_DISCONNECTED = auto()
-    SINGLE_CAM_DEGRADED = auto()
-    FUTON_MODE = auto()
+__all__ = ["TrackingMode", "ModeConfig", "TrackingStateMachine"]
 
 
 @dataclass
