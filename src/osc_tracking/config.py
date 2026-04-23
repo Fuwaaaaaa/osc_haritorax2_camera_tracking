@@ -36,6 +36,9 @@ class TrackingConfig:
     # Camera settings
     cam1_index: int = 0
     cam2_index: int = 1
+    # Optional N-camera list. When non-empty, overrides cam1_index / cam2_index.
+    # 1 entry = monocular, 2 entries = stereo, 3+ = first 2 used (warn).
+    cam_indices: list[int] = field(default_factory=list)
     camera_resolution: tuple[int, int] = (640, 480)
     target_fps: int = 30
 
@@ -87,6 +90,13 @@ class TrackingConfig:
 
     # Visual compass
     compass_blend_factor: float = 0.3
+
+    # Pose predictor: extrapolates occluded joint positions from recent
+    # history instead of freezing at the last observed position.
+    pose_predictor_enabled: bool = True
+    pose_predictor_max_history: int = 5
+    pose_predictor_stale_window_sec: float = 1.0
+    pose_predictor_max_predict_sec: float = 0.5
 
     # FUTON_MODE
     futon_pitch_threshold: float = 60.0

@@ -1,6 +1,7 @@
 {
   "cam1_index": 0,
   "cam2_index": 1,
+  "cam_indices": [],
   "camera_resolution": [640, 480],
   "target_fps": 30,
   "receiver_type": "osc",
@@ -27,6 +28,10 @@
   "drift_velocity_threshold": 0.02,
   "drift_hold_seconds": 10.0,
   "compass_blend_factor": 0.3,
+  "pose_predictor_enabled": true,
+  "pose_predictor_max_history": 5,
+  "pose_predictor_stale_window_sec": 1.0,
+  "pose_predictor_max_predict_sec": 0.5,
   "futon_pitch_threshold": 60.0,
   "futon_exit_threshold": 30.0,
   "futon_dwell_time_sec": 0.5,
