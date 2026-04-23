@@ -444,6 +444,7 @@ class TestZeroJointHelpers:
 
     def test_zero_joint_writes_zeros_with_timestamp(self):
         import numpy as np
+
         from osc_tracking.camera_tracker import (
             FLOATS_PER_JOINT,
             JOINT_COUNT,
@@ -460,6 +461,7 @@ class TestZeroJointHelpers:
 
     def test_zero_all_joints_clears_every_row(self):
         import numpy as np
+
         from osc_tracking.camera_tracker import (
             FLOATS_PER_JOINT,
             JOINT_COUNT,
