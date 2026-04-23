@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added (multi-view triangulation)
+- **真のマルチビュー三角測量 (3+ カメラ)**: `stereo_calibration.py` に `MultiViewCalibration` データクラス、`triangulate_multiview()` (SVD-based DLT + per-view confidence 重み付け)、`multiview_from_stereo()` (legacy `StereoCalibration` のロスレス昇格)、`save_multiview_calibration` / `load_multiview_calibration` (`.npz` I/O、`allow_pickle=False`) を追加。`_camera_worker` を N-way に拡張し、`config.cam_indices` の全カメラから VideoCapture + PoseLandmarker を開いて triangulate_multiview に供給。2 カメラ構成は `multiview_from_stereo` 経由で従来 stereo calib ファイルがそのまま使える (wire 互換: SHM 7 floats/joint 維持、N>=3 時は per-cam visibility を前半/後半 min に畳む)。`CameraConfig` の 3+ カメラ warn/clip は削除。15 multi-view tests 追加
+
 ### Added (docs)
 - **`docs/slimevr-setup-guide.md`**: SlimeVR native / Tundra Labs / その他 SlimeVR 互換 IMU トラッカー向けのセットアップガイド。OSC 出力有効化、`connection_check` での疎通確認、OSC トラッカー番号マッピングがズレた場合の対処、トラッカー数が 8 未満の場合の挙動を明記。コードは既に device-agnostic なのでガイドのみで対応可能。`docs/other-trackers.md` と `README.md` から新ガイドへリンクを追加
 - **`BaseIMUReceiver` template-method abstract class** (`src/osc_tracking/receiver_base.py`): OSC / BLE / Serial receiver で重複していたライフサイクル (idempotent start, freshness-aware reads, thread join warning) を集約。各 receiver は `_run_loop` / `_prepare_start` / `_on_stop_requested` / `_thread_name` の hook のみ実装。`IMUReceiver` Protocol 非破壊で `FusionEngine` / `main._build_receiver()` に影響なし
